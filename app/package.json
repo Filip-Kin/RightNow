@@ -27,6 +27,7 @@
     "expo-system-ui": "~3.0.7",
     "expo-web-browser": "~13.0.3",
     "flowbite": "^2.5.2",
+    "flowbite-react": "^0.10.2",
     "nativewind": "^4.0.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",

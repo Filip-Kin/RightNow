@@ -1,15 +1,17 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { DarkThemeToggle } from "flowbite-react";
 
 export default function Index() {
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      <Text>Edit app/index.tsx to edit this screen.</Text>
-    </View>
-  );
+	return (
+		<View
+			className="bg-gray-100 dark:bg-gray-800"
+			style={{
+				flex: 1,
+				justifyContent: "center",
+				alignItems: "center",
+			}}
+		>
+			<DarkThemeToggle />
+		</View>
+	);
 }
