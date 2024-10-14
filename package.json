@@ -1,0 +1,25 @@
+{
+    "name": "rightnow",
+    "module": "src/index.ts",
+    "type": "module",
+    "scripts": {
+        "start": "bun run src/index.ts",
+        "dev": "bun run --watch src/index.ts",
+        "generate": "bunx drizzle-kit generate",
+        "migrate": "bunx drizzle-kit migrate"
+    },
+    "devDependencies": {
+        "@types/bun": "^1.1.11",
+        "@types/pg": "^8.11.10",
+        "drizzle-kit": "^0.25.0"
+    },
+    "peerDependencies": {
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+        "@trpc/client": "^11.0.0-rc.571",
+        "@trpc/server": "^11.0.0-rc.571",
+        "drizzle-orm": "^0.34.1",
+        "pg": "^8.13.0"
+    }
+}
