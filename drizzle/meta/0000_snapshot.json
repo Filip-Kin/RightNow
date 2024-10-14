@@ -1,5 +1,5 @@
 {
-  "id": "a0697b1f-c539-4c2a-867e-5f4b5058dcf9",
+  "id": "fc3229ce-a8eb-49c3-b771-ba06f354c87e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10,20 +10,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "users_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "2147483647",
-            "cache": "1",
-            "cycle": false
-          }
+          "default": "gen_random_uuid()"
         },
         "name": {
           "name": "name",
@@ -43,11 +33,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "birthday": {
-          "name": "birthday",
+        "dateofbirth": {
+          "name": "dateofbirth",
           "type": "date",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
