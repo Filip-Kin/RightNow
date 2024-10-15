@@ -14,13 +14,13 @@ import {
 
 export default function HomeScreen() {
   const router = useRouter();
-  
+
   return (
     <SafeAreaView>
       <Suspense fallback={<></>}>
         <PermissionAlert />
       </Suspense>
-      
+
       <View className="p-4">
         <Text style={{ fontSize: 32, fontWeight: "bold" }}>
           RightNow

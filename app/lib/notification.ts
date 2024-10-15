@@ -36,7 +36,7 @@ function getPermissionStatus() {
     } else if (result.granted) {
       scheduleHourlyNotification();
     }
-  })
+  });
 }
 
 let notificationStatePermission: Promise<void> | NotificationPermissionsStatus =
@@ -70,7 +70,10 @@ export async function requestNotificationPermissionsAsync() {
 }
 
 AppState.addEventListener("change", (status) => {
-  if (status === 'active' && !(notificationStatePermission instanceof Promise) && !notificationStatePermission.granted) {
+  if (
+    status === "active" && !(notificationStatePermission instanceof Promise) &&
+    !notificationStatePermission.granted
+  ) {
     notificationStatePermission = getPermissionStatus();
   }
 });

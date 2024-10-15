@@ -8,6 +8,7 @@ export default function RootLayout() {
         name="log"
         options={{
           presentation: "modal",
+          headerShown: false,
         }}
       />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
