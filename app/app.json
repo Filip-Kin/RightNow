@@ -19,7 +19,8 @@
       "adaptiveIcon": {
         "foregroundImage": "assets/images/icon-512.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.filipkin.rightnow"
     },
     "web": {
       "bundler": "metro",

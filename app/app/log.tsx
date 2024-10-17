@@ -110,9 +110,33 @@ export default function Index() {
     console.log("Activity:", selectedActivity);
     console.log("Feeling:", feelingList[selectedFeeling]);
 
+    // uhm yeah its actually pushed forward by one hour lol
+    const submitDate = new Date(currentTime.getTime() + (1_000 * 60 * 60));
+    const urls = [
+      `${config.endpoint}/waydrn/${submitDate.getFullYear()}-${submitDate.getMonth() + 1}-${submitDate.getDate()}/${submitDate.getHours()}/${activityList.findIndex((activity) => activity.name === selectedActivity) + 1}`,
+      `${config.endpoint}/hayfrn/${submitDate.getFullYear()}-${submitDate.getMonth() + 1}-${submitDate.getDate()}/${submitDate.getHours()}/${selectedFeeling + 1}`
+    ];
+    console.log(urls);
+
+    (async() => {
+      for (const url of urls) {
+        try {
+          const resp = await fetch(url, { method: 'POST', body: "abc" })
+          if (!resp.ok) {
+            throw new Error(`Failed to submit data to ${url}: ${resp.status} ${resp.statusText}`);
+          }
+          const result = await resp.text();
+          console.log('done!', result);
+        } catch (e) {
+          console.error(e);
+          alert(String(e));
+        }
+      }
+    })();
+
     setSelectedActivity(null);
     setSelectedFeeling(-1);
-    config.lastSync = config.lastSync + (1_000 * 60 * 60);
+    config.lastSync = currentTime.getTime() + (1_000 * 60 * 60);
     setSubmissionCount(submissionCount + 1);
 
     if (submissionCount + 1 === behindCount) {
@@ -137,7 +161,10 @@ export default function Index() {
   return (
     <View style={styles.modalContent}>
       <View style={styles.timeText}>
-        {hourLabel(currentTime.getHours(), config.hour24)}
+        {hourLabel((currentTime.getHours()) % 24, config.hour24)}
+        <Text style={styles.timeTextLabel}>-</Text>
+        {hourLabel((currentTime.getHours() + 1) % 24, config.hour24)}
+
         <Text style={styles.timeTextLabel}>&nbsp;on&nbsp;</Text>
         <AnimatedText text={`${monthNames[currentTime.getMonth()]}`} />
         <Text style={styles.timeTextLabel}>&nbsp;</Text>
