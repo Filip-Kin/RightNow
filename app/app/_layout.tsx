@@ -1,7 +1,9 @@
 import { Stack } from "expo-router";
 import "../global.css";
+import { useNotificationResponseHandler } from "@/lib/notification";
 
 export default function RootLayout() {
+  useNotificationResponseHandler();
   return (
     <Stack>
       <Stack.Screen

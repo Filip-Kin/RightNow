@@ -4,6 +4,7 @@ import { NotificationPermissionsStatus } from "expo-notifications";
 import { useEffect, useState } from "react";
 import { requestPermissionsAsync } from "expo-notifications";
 import { AppState } from "react-native";
+import { useNavigation, useRouter } from "expo-router";
 
 export async function scheduleHourlyNotification() {
   const permission = await Notifications.getPermissionsAsync();
@@ -16,14 +17,34 @@ export async function scheduleHourlyNotification() {
       badge: 1,
       data: {},
       sticky: true,
-      interruptionLevel: "passive",
-      priority: "passive",
+      interruptionLevel: "active",
       sound: false,
     },
     identifier: "right-now",
     trigger: {
       minute: 0,
       repeats: true,
+    },
+  });
+}
+
+export async function scheduleHourlyNotificationRightNow() {
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return;
+
+  await Notifications.cancelAllScheduledNotificationsAsync(); // Clear any previous schedules
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Right Now",
+      badge: 1,
+      data: {},
+      sticky: true,
+      interruptionLevel: "active",
+      sound: false,
+    },
+    identifier: "right-now",
+    trigger: {
+      seconds: 5,
     },
   });
 }
@@ -77,3 +98,24 @@ AppState.addEventListener("change", (status) => {
     notificationStatePermission = getPermissionStatus();
   }
 });
+
+export function useNotificationResponseHandler() {
+  const router = useRouter();
+  const nav = useNavigation();
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const { notification } = response;
+      if (notification.request.identifier === "right-now") {
+      if(nav.getState().routes.length == 0) {
+        router.replace("/");
+      }
+        router.push("/log");
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
+}

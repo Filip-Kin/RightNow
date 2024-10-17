@@ -1,9 +1,11 @@
+import { AnimatedText } from "@/components/AnimatedText";
+import { useHoursBehindCount } from "@/lib/config";
 import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
 } from "@/lib/notification";
 import { useRouter } from "expo-router";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import {
   Button,
   SafeAreaView,
@@ -15,6 +17,10 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
 
+  const [randomNumber, setRandomNumber] = useState(Math.random());
+
+  const behindCount = useHoursBehindCount();
+
   return (
     <SafeAreaView>
       <Suspense fallback={<></>}>
@@ -22,28 +28,51 @@ export default function HomeScreen() {
       </Suspense>
 
       <View className="p-4">
-        <Text style={{ fontSize: 32, fontWeight: "bold" }}>
+        <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center" }}>
           RightNow
         </Text>
-        <TouchableOpacity
-          style={{
-            borderWidth: 1,
-            borderColor: "rgba(0,0,0,0.2)",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "50%",
-            aspectRatio: 1,
-            backgroundColor: "#fff",
-            borderRadius: 9999,
-            margin: "auto",
-            marginTop: 32,
-          }}
-          onPress={() => {
-            router.push({ pathname: "/log" });
-          }}
-        >
-          <Text>Log Right Now</Text>
-        </TouchableOpacity>
+        {behindCount <= 0
+          ? (
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: "rgba(0,0,0,0.1)",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "50%",
+                aspectRatio: 1,
+                backgroundColor: "#fff5",
+                borderRadius: 9999,
+                margin: "auto",
+                marginTop: 32,
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>You're all caught up!</Text>
+            </View>
+          )
+          : (
+            <TouchableOpacity
+              style={{
+                borderWidth: 1,
+                borderColor: "rgba(0,0,0,0.2)",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "50%",
+                aspectRatio: 1,
+                backgroundColor: "#fff",
+                borderRadius: 9999,
+                margin: "auto",
+                marginTop: 32,
+              }}
+              onPress={() => {
+                router.push({ pathname: "/log" });
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>
+                Log {behindCount} {behindCount === 1 ? "entry" : "entries"}
+              </Text>
+            </TouchableOpacity>
+          )}
       </View>
     </SafeAreaView>
   );
