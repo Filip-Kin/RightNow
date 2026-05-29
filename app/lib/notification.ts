@@ -22,6 +22,7 @@ export async function scheduleHourlyNotification() {
     },
     identifier: "right-now",
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
       minute: 0,
       repeats: true,
     },
@@ -44,6 +45,7 @@ export async function scheduleHourlyNotificationRightNow() {
     },
     identifier: "right-now",
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 5,
     },
   });
@@ -107,7 +109,7 @@ export function useNotificationResponseHandler() {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const { notification } = response;
       if (notification.request.identifier === "right-now") {
-      if(nav.getState().routes.length == 0) {
+      if((nav.getState()?.routes.length ?? 0) === 0) {
         router.replace("/");
       }
         router.push("/log");
