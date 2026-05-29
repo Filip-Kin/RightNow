@@ -12,7 +12,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import * as DocumentPicker from "expo-document-picker";
 import { File as FsFile } from "expo-file-system";
 import { Icon } from "@/components/Icon";
-import { importEntries } from "@/lib/entries";
+import { importEntries, importNotes } from "@/lib/entries";
 import { parseWaydrnCsv, inferYearFromName, type ParsedCsv } from "@/lib/csv";
 import {
   COLOR_CHOICES, getActivity, getContrastingTextColor, ICON_CHOICES,
@@ -106,7 +106,15 @@ export default function ImportScreen() {
           .map((c) => ({ date: c.date, hour: c.hour, activity: remap.get(c.value)! }));
       }
       const n = await importEntries(items);
-      setResult(`Imported ${n} ${metric} entr${n === 1 ? "y" : "ies"} across ${parsed.dayCount} day${parsed.dayCount === 1 ? "" : "s"}.`);
+      // Day notes (from the Notes column) are per-day and metric-independent.
+      let noteCount = 0;
+      if (parsed.notes.size > 0) {
+        noteCount = await importNotes([...parsed.notes].map(([date, note]) => ({ date, note })));
+      }
+      setResult(
+        `Imported ${n} ${metric} entr${n === 1 ? "y" : "ies"} across ${parsed.dayCount} day${parsed.dayCount === 1 ? "" : "s"}`
+        + (noteCount ? ` and ${noteCount} day note${noteCount === 1 ? "" : "s"}` : "") + ".",
+      );
       setParsed(null);
       setFileName(null);
       setChoices({});
@@ -168,7 +176,8 @@ export default function ImportScreen() {
         {parsed && (
           <>
             <Text style={styles.summary}>
-              {fileName} — {parsed.cells.length} cells, {parsed.dayCount} days, values {parsed.values.join(", ")}
+              {fileName} — {parsed.cells.length} cells, {parsed.dayCount} days
+              {parsed.notes.size > 0 ? `, ${parsed.notes.size} notes` : ""}, values {parsed.values.join(", ")}
             </Text>
 
             {metric === "activity" && (

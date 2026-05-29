@@ -30,6 +30,9 @@ test("parses hour cells, skips blanks/averages, reads legend", () => {
   expect(r.legend.get(2)).toBe("Friends");
   // Distinct values present.
   expect(r.values).toEqual([0, 3, 8, 9]);
+  // Notes column captured per day (only non-empty).
+  expect(r.notes.get("2023-1-2")).toBe("FRC Kickoff");
+  expect(r.notes.has("2023-1-1")).toBe(false);
 });
 
 test("infers year from filename", () => {

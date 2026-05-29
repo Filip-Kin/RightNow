@@ -10,7 +10,10 @@ import { useEffect, useState } from "react";
 import { trpc } from "./trpc";
 import { getDEK } from "./auth";
 import { useDate } from "./time";
-import { cellId, configCellId, openEntry, sealEntry, type EntryPayload } from "./crypto";
+import {
+    cellId, configCellId, noteCellId, openCell, sealEntry, sealNote,
+    type EntryPayload, type NotePayload,
+} from "./crypto";
 import {
     applyPulledConfig, loadTaxonomy, markTaxonomyClean,
     subscribeTaxonomy, taxonomyDirty, taxonomySealedRecord,
@@ -26,13 +29,21 @@ export interface LocalEntry {
     deleted: boolean;
 }
 
+export interface LocalNote {
+    text: string;
+    updatedAt: number; // epoch ms, logical clock for LWW
+}
+
 const STORE_KEY = "rn_entries";
+const NOTES_KEY = "rn_notes";
 const CURSOR_KEY = "rn_cursor";
 const HOUR_MS = 60 * 60 * 1000;
 
 let store: Record<string, LocalEntry> = {}; // cellId -> entry
+let notes: Record<string, LocalNote> = {}; // date "YYYY-M-D" -> note
 let cursor = 0; // server receivedAt cursor for incremental pull
-const dirty = new Set<string>(); // cellIds with un-pushed local changes
+const dirty = new Set<string>(); // entry cellIds with un-pushed local changes
+const noteDirty = new Set<string>(); // dates with un-pushed note changes
 let loaded = false;
 
 const listeners = new Set<() => void>();
@@ -48,14 +59,18 @@ export function subscribeEntries(fn: () => void): () => void {
 async function persist() {
     await Promise.all([
         AsyncStorage.setItem(STORE_KEY, JSON.stringify(store)),
+        AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes)),
         AsyncStorage.setItem(CURSOR_KEY, String(cursor)),
     ]);
 }
 
 export async function loadStore(): Promise<void> {
     if (loaded) return;
-    const [s, c] = await Promise.all([AsyncStorage.getItem(STORE_KEY), AsyncStorage.getItem(CURSOR_KEY), loadTaxonomy()]);
+    const [s, n, c] = await Promise.all([
+        AsyncStorage.getItem(STORE_KEY), AsyncStorage.getItem(NOTES_KEY), AsyncStorage.getItem(CURSOR_KEY), loadTaxonomy(),
+    ]);
     store = s ? JSON.parse(s) : {};
+    notes = n ? JSON.parse(n) : {};
     cursor = c ? Number(c) : 0;
     loaded = true;
     emit();
@@ -64,10 +79,14 @@ export async function loadStore(): Promise<void> {
 /** Clear local state (on logout). */
 export async function clearStore(): Promise<void> {
     store = {};
+    notes = {};
     cursor = 0;
     dirty.clear();
+    noteDirty.clear();
     loaded = false;
-    await Promise.all([AsyncStorage.removeItem(STORE_KEY), AsyncStorage.removeItem(CURSOR_KEY)]);
+    await Promise.all([
+        AsyncStorage.removeItem(STORE_KEY), AsyncStorage.removeItem(NOTES_KEY), AsyncStorage.removeItem(CURSOR_KEY),
+    ]);
     emit();
 }
 
@@ -101,6 +120,39 @@ export function useEntries(): LocalEntry[] {
     }, []);
     return entries;
 }
+
+// #region per-day notes
+export function getNote(date: string): string | undefined {
+    const n = notes[date];
+    return n && n.text ? n.text : undefined;
+}
+
+/** Map of date -> note text (only non-empty notes), for the grid. */
+export function getNotes(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const d in notes) if (notes[d].text) out[d] = notes[d].text;
+    return out;
+}
+
+/** Set (or clear, when text is empty) a day's note, then push it (debounced). */
+export async function setNote(date: string, text: string): Promise<void> {
+    notes[date] = { text, updatedAt: Date.now() };
+    noteDirty.add(date);
+    emit();
+    await persist();
+    schedulePush();
+}
+
+/** Reactive map of date -> note text; re-renders when notes change. */
+export function useNotes(): Record<string, string> {
+    const [v, setV] = useState<Record<string, string>>(getNotes);
+    useEffect(() => {
+        loadStore();
+        return subscribeEntries(() => setV(getNotes()));
+    }, []);
+    return v;
+}
+// #endregion
 
 export interface HourSlot {
     date: string; // "YYYY-M-D"
@@ -202,6 +254,25 @@ export async function importEntries(
     return items.length;
 }
 
+/** Bulk import day notes (used by CSV import). Day-real-time updatedAt so manual edits win. */
+export async function importNotes(items: { date: string; note: string }[]): Promise<number> {
+    const dek = getDEK();
+    if (!dek) throw new Error("Locked: no decryption key");
+    await loadStore();
+    let n = 0;
+    for (const it of items) {
+        if (!it.note) continue;
+        const updatedAt = Math.max(slotMs(it.date, 0), notes[it.date]?.updatedAt ?? 0);
+        notes[it.date] = { text: it.note, updatedAt };
+        noteDirty.add(it.date);
+        n++;
+    }
+    emit();
+    await persist();
+    schedulePush();
+    return n;
+}
+
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePush() {
     if (pushTimer) return;
@@ -227,12 +298,19 @@ export async function push(): Promise<void> {
         const sealed = sealEntry(dek, payload);
         return { cellId: id, ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: e.deleted, updatedAt: e.updatedAt };
     });
+    const noteDates = [...noteDirty];
+    for (const d of noteDates) {
+        const n = notes[d];
+        const sealed = sealNote(dek, { date: d, note: n.text });
+        records.push({ cellId: noteCellId(dek, d), ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: !n.text, updatedAt: n.updatedAt });
+    }
     const pushTaxonomy = taxonomyDirty();
     if (pushTaxonomy) records.push(taxonomySealedRecord(dek));
     if (records.length === 0) return;
 
     await trpc.entries.push.mutate({ records });
     for (const id of ids) dirty.delete(id);
+    for (const d of noteDates) noteDirty.delete(d);
     if (pushTaxonomy) markTaxonomyClean();
 }
 
@@ -252,16 +330,27 @@ export async function sync(): Promise<void> {
             if (applyPulledConfig(dek, r)) changed = true;
             continue;
         }
-        const existing = store[r.cellId];
-        if (existing && existing.updatedAt >= r.updatedAt) continue; // local is newer or equal
+        let p: EntryPayload | NotePayload;
         try {
-            const p = openEntry(dek, { ciphertext: r.ciphertext, nonce: r.nonce });
+            p = openCell(dek, { ciphertext: r.ciphertext, nonce: r.nonce });
+        } catch {
+            continue; // skip undecryptable
+        }
+        if ("hour" in p) {
+            const existing = store[r.cellId];
+            if (existing && existing.updatedAt >= r.updatedAt) continue; // local newer or equal
             store[r.cellId] = {
                 date: p.date, hour: p.hour, activity: p.activity, feeling: p.feeling,
                 source: p.source, updatedAt: r.updatedAt, deleted: r.deleted,
             };
             changed = true;
-        } catch {/* skip undecryptable */}
+        } else {
+            const existing = notes[p.date];
+            if (existing && existing.updatedAt >= r.updatedAt) continue;
+            if (r.deleted || !p.note) delete notes[p.date];
+            else notes[p.date] = { text: p.note, updatedAt: r.updatedAt };
+            changed = true;
+        }
     }
     cursor = res.cursor;
     if (changed) emit();

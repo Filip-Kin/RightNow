@@ -16,6 +16,7 @@ export interface ParsedCell {
 export interface ParsedCsv {
   cells: ParsedCell[];
   legend: Map<number, string>; // source index -> name, from the `#`/`Name` columns
+  notes: Map<string, string>; // date "YYYY-M-D" -> day note, from the `Notes` column
   values: number[]; // distinct cell values present, sorted
   dayCount: number; // number of day rows that produced at least one cell
 }
@@ -59,16 +60,19 @@ export function parseWaydrnCsv(text: string, year: number): ParsedCsv {
   const hourCols = new Map<number, number>(); // column index -> hour
   let nameCol = -1;
   let numberCol = -1;
+  let notesCol = -1;
   header.forEach((h, col) => {
     const m = /^(\d{1,2}):00$/.exec(h);
     if (m) hourCols.set(col, Number(m[1]));
     else if (/^#$/.test(h)) numberCol = col;
     else if (/^name$/i.test(h)) nameCol = col;
+    else if (/^notes$/i.test(h)) notesCol = col;
   });
   if (hourCols.size === 0) throw new Error("No hour columns (H:00) found in the header.");
 
   const cells: ParsedCell[] = [];
   const legend = new Map<number, string>();
+  const notes = new Map<string, string>();
   const valueSet = new Set<number>();
   let dayCount = 0;
 
@@ -90,6 +94,11 @@ export function parseWaydrnCsv(text: string, year: number): ParsedCsv {
     const day = Number(dm[2]);
     const date = `${year}-${month}-${day}`;
 
+    if (notesCol >= 0) {
+      const note = (fields[notesCol] ?? "").trim();
+      if (note) notes.set(date, note);
+    }
+
     let produced = false;
     for (const [col, hour] of hourCols) {
       const raw = (fields[col] ?? "").trim();
@@ -103,7 +112,7 @@ export function parseWaydrnCsv(text: string, year: number): ParsedCsv {
     if (produced) dayCount++;
   }
 
-  return { cells, legend, values: [...valueSet].sort((a, b) => a - b), dayCount };
+  return { cells, legend, notes, values: [...valueSet].sort((a, b) => a - b), dayCount };
 }
 
 /** "2023 WAYDRN.csv" / "HAYFRN-2024.csv" -> 2023 / 2024, else undefined. */

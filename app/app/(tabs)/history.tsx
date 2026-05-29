@@ -3,10 +3,10 @@
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
 import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { sync, useEntries, type LocalEntry } from "@/lib/entries";
+import { setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
   activityName, feelingColors, feelings, getActivity, useActivities,
 } from "@/lib/activities";
@@ -29,10 +29,12 @@ interface DayRow {
 
 export default function HistoryScreen() {
   const entries = useEntries();
+  const notes = useNotes();
   useActivities(); // re-render on taxonomy edits (colors/names)
   const [range, setRange] = useState<number>(30);
   const [mode, setMode] = useState<ColorMode>("activity");
   const [selected, setSelected] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
+  const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
 
   // Pull/merge on open like Home.
   useEffect(() => {
@@ -137,10 +139,12 @@ export default function HistoryScreen() {
         windowSize={11}
         renderItem={({ item }) => (
           <View style={styles.dayRow}>
-            <View style={styles.dayLabelCol}>
-              <Text style={styles.dayLabel}>{item.label}</Text>
+            <TouchableOpacity style={styles.dayLabelCol} onPress={() => setNoteDate(item.key)}>
+              <Text style={styles.dayLabel} numberOfLines={1}>
+                {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : ""}
+              </Text>
               <Text style={styles.dayWeekday}>{item.weekday}</Text>
-            </View>
+            </TouchableOpacity>
             {item.hours.map((e, h) => (
               <TouchableOpacity
                 key={h}
@@ -157,9 +161,46 @@ export default function HistoryScreen() {
         ListFooterComponent={<Legend mode={mode} />}
       />
 
-      {selected && <DetailBar selected={selected} onClose={() => setSelected(null)} />}
+      {selected && <DetailBar selected={selected} note={notes[selected.date]} onClose={() => setSelected(null)} />}
+      {noteDate && <NoteEditor date={noteDate} initial={notes[noteDate] ?? ""} onClose={() => setNoteDate(null)} />}
     </SafeAreaView>
     </ScreenContainer>
+  );
+}
+
+function NoteEditor({ date, initial, onClose }: { date: string; initial: string; onClose: () => void }) {
+  const [text, setText] = useState(initial);
+  const [y, mo, d] = date.split("-").map(Number);
+  const label = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
+  function save() {
+    setNote(date, text.trim());
+    onClose();
+  }
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.noteBackdrop}>
+        <View style={styles.noteCard}>
+          <Text style={styles.noteTitle}>Note · {label}</Text>
+          <Text style={styles.noteHint}>What did you do this day? Anything worth remembering.</Text>
+          <TextInput
+            style={styles.noteInput}
+            value={text}
+            onChangeText={setText}
+            placeholder="e.g. FRC district event, dentist, road trip…"
+            multiline
+            autoFocus
+          />
+          <View style={styles.noteActions}>
+            <TouchableOpacity style={styles.noteCancel} onPress={onClose}>
+              <Text style={styles.noteCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.noteSave} onPress={save}>
+              <Text style={styles.noteSaveText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -172,7 +213,7 @@ function Summary({ value, label }: { value: string; label: string }) {
   );
 }
 
-function DetailBar({ selected, onClose }: { selected: { date: string; hour: number; entry?: LocalEntry }; onClose: () => void }) {
+function DetailBar({ selected, note, onClose }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; onClose: () => void }) {
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -189,6 +230,7 @@ function DetailBar({ selected, onClose }: { selected: { date: string; hour: numb
             </Text>
           )
           : <Text style={styles.detailEmpty}>Not logged</Text>}
+        {note ? <Text style={styles.detailNote} numberOfLines={2}>📝 {note}</Text> : null}
       </View>
       <TouchableOpacity onPress={onClose} style={styles.detailClose}>
         <Text style={styles.detailCloseText}>✕</Text>
@@ -240,6 +282,7 @@ const styles = StyleSheet.create({
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
   dayLabelCol: { width: 46 },
   dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
+  noteDot: { fontSize: 8, color: "#1a73e8" },
   dayWeekday: { fontSize: 9, color: "#9aa0a6" },
   cell: { flex: 1, height: 16, marginHorizontal: 0.5, borderRadius: 2 },
   cellSelected: { borderWidth: 1.5, borderColor: "#111" },
@@ -248,8 +291,20 @@ const styles = StyleSheet.create({
   detailTitle: { fontSize: 14, fontWeight: "700", color: "#111" },
   detailBody: { fontSize: 14, color: "#3c4043", marginTop: 2 },
   detailEmpty: { fontSize: 14, color: "#9aa0a6", marginTop: 2, fontStyle: "italic" },
+  detailNote: { fontSize: 13, color: "#3c4043", marginTop: 4 },
   detailClose: { padding: 8 },
   detailCloseText: { fontSize: 16, color: "#5f6368" },
+
+  noteBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
+  noteCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20 },
+  noteTitle: { fontSize: 18, fontWeight: "700", color: "#111" },
+  noteHint: { fontSize: 13, color: "#5f6368", marginTop: 4, marginBottom: 12 },
+  noteInput: { borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, padding: 12, fontSize: 15, color: "#111", minHeight: 90, textAlignVertical: "top" },
+  noteActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 16 },
+  noteCancel: { paddingVertical: 10, paddingHorizontal: 16 },
+  noteCancelText: { color: "#5f6368", fontSize: 16, fontWeight: "600" },
+  noteSave: { backgroundColor: "#1a73e8", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  noteSaveText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
   legend: { marginTop: 12, marginBottom: 16 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },

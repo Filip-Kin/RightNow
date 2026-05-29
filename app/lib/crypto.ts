@@ -112,6 +112,16 @@ export function configCellId(dek: Uint8Array): string {
     return bytesToHex(hmac(sha256, cellKey, utf8ToBytes("config|activities")));
 }
 
+/**
+ * Stable id for a per-day note cell. Like configCellId, the HMAC input
+ * ("note|YYYY-M-D") can't be produced by cellId() ("YYYY-M-D|<number>"), so note
+ * cells never collide with hour cells but ride the same opaque entries table.
+ */
+export function noteCellId(dek: Uint8Array, date: string): string {
+    const { cellKey } = dekSubkeys(dek);
+    return bytesToHex(hmac(sha256, cellKey, utf8ToBytes(`note|${date}`)));
+}
+
 export interface EntryPayload {
     // date ("YYYY-M-D") + hour are encrypted in the payload too, so a fresh device
     // can place a pulled cell (the cell_id HMAC is opaque and can't be reversed).
@@ -121,6 +131,17 @@ export interface EntryPayload {
     feeling: number | null;
     source: "manual" | "health";
 }
+
+export interface NotePayload {
+    // Free-text "what I did today" note for a day. `date` lets a fresh device place
+    // the pulled cell (its HMAC id is opaque). No `hour` field — that's how a pulled
+    // cell is told apart from an EntryPayload (see openCell).
+    date: string;
+    note: string;
+}
+
+/** A decrypted opaque cell is either an hour entry or a day note. */
+export type CellPayload = EntryPayload | NotePayload;
 
 // AEAD reveals plaintext length, and an EntryPayload's JSON length varies slightly
 // with its values (activity "10" vs "3", 1- vs 2-digit hour, null vs a number).
@@ -143,14 +164,38 @@ function unpadPKCS7(data: Uint8Array): Uint8Array {
     return data.subarray(0, data.length - padLen);
 }
 
-export function sealEntry(dek: Uint8Array, payload: EntryPayload): Sealed {
+// Entries and notes share one padded JSON format so a pulled cell can be decrypted
+// without knowing its kind up front (then discriminated by shape in openCell). A
+// long note just pads to the next 128B multiple; both stay length-bucketed.
+function sealPadded(dek: Uint8Array, obj: unknown): Sealed {
     const { dataKey } = dekSubkeys(dek);
-    return seal(dataKey, padPKCS7(utf8ToBytes(JSON.stringify(payload)), ENTRY_BLOCK));
+    return seal(dataKey, padPKCS7(utf8ToBytes(JSON.stringify(obj)), ENTRY_BLOCK));
+}
+
+function openPadded<T>(dek: Uint8Array, sealed: Sealed): T {
+    const { dataKey } = dekSubkeys(dek);
+    return JSON.parse(bytesToUtf8(unpadPKCS7(open(dataKey, sealed)))) as T;
+}
+
+export function sealEntry(dek: Uint8Array, payload: EntryPayload): Sealed {
+    return sealPadded(dek, payload);
 }
 
 export function openEntry(dek: Uint8Array, sealed: Sealed): EntryPayload {
-    const { dataKey } = dekSubkeys(dek);
-    return JSON.parse(bytesToUtf8(unpadPKCS7(open(dataKey, sealed))));
+    return openPadded<EntryPayload>(dek, sealed);
+}
+
+export function sealNote(dek: Uint8Array, payload: NotePayload): Sealed {
+    return sealPadded(dek, payload);
+}
+
+export function openNote(dek: Uint8Array, sealed: Sealed): NotePayload {
+    return openPadded<NotePayload>(dek, sealed);
+}
+
+/** Decrypt a pulled cell of unknown kind; discriminate with `"hour" in p` (entry) vs note. */
+export function openCell(dek: Uint8Array, sealed: Sealed): CellPayload {
+    return openPadded<CellPayload>(dek, sealed);
 }
 
 /**

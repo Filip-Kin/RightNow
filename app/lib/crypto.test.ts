@@ -2,8 +2,9 @@
 import { expect, test } from "bun:test";
 import {
     cellId, configCellId, deriveFromSecret, generateDEK, generateRecoveryCode,
-    normalizeRecoveryCode, openEntry, openJson, sealEntry, sealJson, unwrapDEK, wrapDEK,
-    dekToHex, dekFromHex, type EntryPayload,
+    normalizeRecoveryCode, noteCellId, openCell, openEntry, openJson, openNote,
+    sealEntry, sealJson, sealNote, unwrapDEK, wrapDEK,
+    dekToHex, dekFromHex, type EntryPayload, type NotePayload,
 } from "./crypto";
 
 const email = "Filip@Example.com ";
@@ -86,6 +87,27 @@ test("sealJson/openJson round-trips the taxonomy config", () => {
     const sealed = sealJson(dek, config);
     expect(openJson<typeof config>(dek, sealed)).toEqual(config);
     expect(() => openJson(generateDEK(), sealed)).toThrow();
+});
+
+test("note cell id is stable, opaque, per-date, and distinct from entry/config cells", () => {
+    const dek = generateDEK();
+    expect(noteCellId(dek, "2026-5-28")).toBe(noteCellId(dek, "2026-5-28"));
+    expect(noteCellId(dek, "2026-5-28")).not.toBe(noteCellId(dek, "2026-5-29"));
+    expect(noteCellId(dek, "2026-5-28")).not.toBe(cellId(dek, "2026-5-28", 9));
+    expect(noteCellId(dek, "2026-5-28")).not.toBe(configCellId(dek));
+});
+
+test("note seals/opens and openCell discriminates entry vs note", () => {
+    const dek = generateDEK();
+    const note: NotePayload = { date: "2026-5-28", note: "FRC district event, long day" };
+    const entry: EntryPayload = { date: "2026-5-28", hour: 9, activity: 3, feeling: 4, source: "manual" };
+    const sealedNote = sealNote(dek, note);
+    const sealedEntry = sealEntry(dek, entry);
+    expect(openNote(dek, sealedNote)).toEqual(note);
+    // openCell returns the right shape; "hour" present iff it's an entry.
+    expect("hour" in openCell(dek, sealedEntry)).toBe(true);
+    expect("hour" in openCell(dek, sealedNote)).toBe(false);
+    expect("note" in openCell(dek, sealedNote)).toBe(true);
 });
 
 test("DEK hex persistence round-trips", () => {
