@@ -8,6 +8,7 @@ import {
   ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import * as DocumentPicker from "expo-document-picker";
 import { File as FsFile } from "expo-file-system";
 import { Icon } from "@/components/Icon";
@@ -117,6 +118,7 @@ export default function ImportScreen() {
   }
 
   return (
+    <ScreenContainer maxWidth={720}>
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={styles.hint}>
@@ -229,6 +231,7 @@ export default function ImportScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

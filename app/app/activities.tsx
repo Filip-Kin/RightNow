@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { getAllEntries } from "@/lib/entries";
 import {
   ActivityDef, COLOR_CHOICES, getContrastingTextColor, ICON_CHOICES,
@@ -31,6 +32,7 @@ export default function ActivitiesScreen() {
   }
 
   return (
+    <ScreenContainer>
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={styles.hint}>
@@ -62,6 +64,7 @@ export default function ActivitiesScreen() {
         />
       )}
     </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

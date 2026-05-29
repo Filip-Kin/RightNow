@@ -7,6 +7,7 @@ import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useRouter } from "expo-router";
 import { setEntry, useStoreLoaded, useUnloggedHours } from "@/lib/entries";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { useActivities } from "@/lib/activities";
 import {
   feelingIcons,
@@ -96,6 +97,7 @@ export default function Index() {
   };
 
   return (
+    <ScreenContainer>
     <View style={styles.modalContent}>
       <View style={styles.timeText}>
         {hourLabel(slot.hour % 24, config.hour24)}
@@ -189,6 +191,7 @@ export default function Index() {
       </TouchableOpacity>
       <View style={{ height: useSafeAreaInsets().bottom }}></View>
     </View>
+    </ScreenContainer>
   );
 }
 

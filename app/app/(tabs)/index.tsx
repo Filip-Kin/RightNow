@@ -1,4 +1,5 @@
 import { AnimatedText } from "@/components/AnimatedText";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { useConfig } from "@/lib/config";
 import { sync, useUnloggedHours } from "@/lib/entries";
 import {
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   const behindCount = useUnloggedHours(config.catchUpWindowHours).length;
 
   return (
+    <ScreenContainer>
     <SafeAreaView>
       <Suspense fallback={<></>}>
         <PermissionAlert />
@@ -80,6 +82,7 @@ export default function HomeScreen() {
           )}
       </View>
     </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

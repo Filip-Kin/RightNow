@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { sync, useEntries, type LocalEntry } from "@/lib/entries";
 import {
   activityName, feelingColors, feelings, getActivity, useActivities,
@@ -93,6 +94,7 @@ export default function HistoryScreen() {
   }
 
   return (
+    <ScreenContainer maxWidth={1100}>
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.heading}>History</Text>
 
@@ -157,6 +159,7 @@ export default function HistoryScreen() {
 
       {selected && <DetailBar selected={selected} onClose={() => setSelected(null)} />}
     </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

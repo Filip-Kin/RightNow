@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { resetConfig, useConfig } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
 import { logout, useAuth } from "@/lib/auth";
 
@@ -25,6 +26,7 @@ export default function Settings() {
   }
 
   return (
+    <ScreenContainer>
     <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>Settings</Text>
 
@@ -68,6 +70,7 @@ export default function Settings() {
         <Button title={"Log Out"} color="#d93025" onPress={() => { logout(); }} />
       </View>
     </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
