@@ -1,0 +1,24 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+
+# Builds the image on the NAS runner and pushes it to the Forgejo registry.
+# The cloud Coolify app then pulls it (deploy trigger added once that app exists).
+jobs:
+  build-and-deploy:
+    runs-on: nas
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to the Forgejo container registry
+        run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login git.filipkin.com -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build and push image
+        run: |
+          set -eux
+          IMAGE=git.filipkin.com/filip/rightnow
+          docker build -t "$IMAGE:latest" -t "$IMAGE:${{ github.sha }}" .
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
