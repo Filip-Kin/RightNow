@@ -2,19 +2,15 @@
     "compilerOptions": {
         // Enable latest features
         "lib": [
-            "ESNext",
-            "DOM"
+            "ESNext"
         ],
         "target": "ESNext",
         "module": "ESNext",
         "moduleDetection": "force",
-        "jsx": "react-jsx",
         "allowJs": true,
         // Bundler mode
         "moduleResolution": "bundler",
-        "allowImportingTsExtensions": true,
         "verbatimModuleSyntax": true,
-        "noEmit": true,
         // Best practices
         "strict": true,
         "skipLibCheck": true,
@@ -30,12 +26,20 @@
             "./node_modules/@types",
             "./src/types"
         ],
+        // Project-reference output: the app consumes these .d.ts for end-to-end
+        // tRPC types. Bun runs the .ts directly at runtime, so emit declarations
+        // only (no JS). composite is required for `tsc -b` references.
+        "composite": true,
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "outDir": "./dist",
+        "rootDir": "./src"
     },
     "include": [
         "src"
     ],
     "exclude": [
         "node_modules",
-        "app"
+        "dist"
     ]
 }

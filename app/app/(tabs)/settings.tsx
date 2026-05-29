@@ -5,10 +5,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import DatePicker from 'react-native-date-picker';
 import { useDate } from "@/lib/time";
 import { scheduleHourlyNotificationRightNow } from "@/lib/notification";
+import { logout, useAuth } from "@/lib/auth";
 
 export default function Settings() {
   const config = useConfig();
-
+  const { email } = useAuth();
 
   const maxDate = useDate('hourly');
   maxDate.setMinutes(0);
@@ -60,7 +61,12 @@ export default function Settings() {
           scheduleHourlyNotificationRightNow();
         }}
       />
-      
+
+      <View style={{ marginTop: 24 }}>
+        {email ? <Text style={styles.label}>Signed in as {email}</Text> : null}
+        <Button title={"Log Out"} color="#d93025" onPress={() => { logout(); }} />
+      </View>
+
     </SafeAreaView>
   );
 }
