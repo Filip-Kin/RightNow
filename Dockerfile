@@ -15,6 +15,9 @@ RUN cd app && bunx --bun expo export --platform web --output-dir dist
 FROM oven/bun:1.3.13
 WORKDIR /app
 
+# curl is needed for the platform health check (Coolify execs curl/wget in-container).
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Install server deps standalone (no workspace root here -> installs from server/package.json).
 COPY server/package.json ./
 RUN bun install
@@ -26,6 +29,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV WEB_DIR=./web
 EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=10 \
+  CMD curl -fsS http://127.0.0.1:3000/health || exit 1
 
 # Apply migrations, then serve web + API.
 CMD ["sh", "-c", "bun run migrate && bun run src/index.ts"]
