@@ -5,8 +5,8 @@
     "scripts": {
         "start": "bun run src/index.ts",
         "dev": "bun run --watch src/index.ts",
-        "generate": "bunx drizzle-kit generate",
-        "migrate": "bunx drizzle-kit migrate"
+        "generate": "bunx --bun drizzle-kit generate",
+        "migrate": "bunx --bun drizzle-kit migrate"
     },
     "devDependencies": {
         "@types/bun": "^1.1.11",

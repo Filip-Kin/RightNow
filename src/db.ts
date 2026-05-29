@@ -1,21 +1,21 @@
-import { drizzle } from 'drizzle-orm/connect';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import { usersTable } from './schema/users';
+import { tokensTable } from './schema/tokens';
+import { userKeysTable } from './schema/user-keys';
+import { entriesTable } from './schema/entries';
 
-export let db: NodePgDatabase<Record<string, never>> & { $client: Pool; };
+const schema = { usersTable, tokensTable, userKeysTable, entriesTable };
 
-async function main() {
-    // You can specify any property from the node-postgres connection options
-    db = await drizzle("node-postgres", {
-        connection: {
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            host: process.env.DB_HOST,
-            port: process.env.DB_PORT,
-            database: process.env.DB_NAME,
-            ssl: false
-        }
-    });
-}
+const pool = new Pool({
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    database: process.env.DB_NAME,
+    // Managed Postgres (the hosted deploy) terminates TLS; local dev does not.
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+});
 
-main();
+export const db = drizzle(pool, { schema });
+export type Schema = typeof schema;
