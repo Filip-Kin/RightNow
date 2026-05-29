@@ -1,4 +1,4 @@
-import { createHTTPServer } from '@trpc/server/adapters/standalone';
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { authRouter } from './router/auth';
 import { entriesRouter } from './router/entries';
 import { createContext, router } from './trpc';
@@ -9,30 +9,56 @@ const appRouter = router({
 });
 export type AppRouter = typeof appRouter;
 
-const server = createHTTPServer({
-    router: appRouter,
-    createContext,
-    middleware: (req, res, next) => {
-        // CORS for the web build. Native clients ignore this.
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        if (req.method === 'OPTIONS') {
-            res.writeHead(204);
-            res.end();
-            return;
+const port = Number(process.env.PORT) || 3000;
+// Directory of the built Expo web app (populated by the Docker build stage).
+const WEB_DIR = process.env.WEB_DIR ?? './web';
+
+const CORS: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+async function serveStatic(pathname: string): Promise<Response> {
+    const rel = pathname === '/' ? '/index.html' : pathname;
+    let file = Bun.file(WEB_DIR + rel);
+    if (!(await file.exists())) {
+        // SPA fallback: unknown paths render the client-routed app shell.
+        file = Bun.file(WEB_DIR + '/index.html');
+        if (!(await file.exists())) {
+            return new Response('Not found', { status: 404 });
         }
-        // Health check for Coolify. tRPC procedure paths look like /auth.login,
-        // so /health and / never collide with them.
-        if (req.url === '/health' || req.url === '/') {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, service: 'rightnow' }));
-            return;
+    }
+    return new Response(file);
+}
+
+Bun.serve({
+    port,
+    async fetch(req) {
+        const url = new URL(req.url);
+
+        if (url.pathname === '/health') {
+            return Response.json({ ok: true, service: 'rightnow' });
         }
-        next();
+
+        // tRPC API under /api (both the web app and the native app call this).
+        if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+            if (req.method === 'OPTIONS') {
+                return new Response(null, { status: 204, headers: CORS });
+            }
+            const res = await fetchRequestHandler({
+                endpoint: '/api',
+                req,
+                router: appRouter,
+                createContext,
+            });
+            for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
+            return res;
+        }
+
+        // Everything else: the static Expo web build.
+        return serveStatic(url.pathname);
     },
 });
 
-const port = Number(process.env.PORT) || 3000;
-server.listen(port);
-console.log(`RightNow API listening on :${port}`);
+console.log(`RightNow listening on :${port} (web from ${WEB_DIR}, API at /api)`);

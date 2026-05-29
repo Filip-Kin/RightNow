@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server';
-import type { CreateHTTPContextOptions } from '@trpc/server/adapters/standalone';
+import type { FetchCreateContextFnOptions } from '@trpc/server/adapters/fetch';
 import { eq } from 'drizzle-orm';
 import { db } from './db';
 import { tokensTable } from './schema/tokens';
@@ -16,10 +16,10 @@ export interface Session {
  * The token is the only thing that identifies the caller; it never carries any
  * decryption key.
  */
-export async function createContext({ req }: CreateHTTPContextOptions) {
+export async function createContext({ req }: FetchCreateContextFnOptions) {
     let session: Session | null = null;
 
-    const header = req.headers['authorization'];
+    const header = req.headers.get('authorization');
     if (header?.startsWith('Bearer ')) {
         const token = header.slice('Bearer '.length).trim();
         const row = (await db.select().from(tokensTable).where(eq(tokensTable.token, token)))[0];

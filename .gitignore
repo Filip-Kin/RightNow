@@ -177,3 +177,7 @@ dist
 # monorepo build artifacts
 server/dist/
 *.tsbuildinfo
+
+# server-embedded web build (produced in Docker)
+server/web/
+app/dist/

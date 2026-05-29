@@ -1,8 +1,0 @@
-app/
-node_modules/
-.git/
-.env
-.env.*
-*.log
-drizzle/meta/_journal.json.bak
-.claude/

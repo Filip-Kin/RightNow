@@ -1,0 +1,13 @@
+# Build context is the repo root. Exclude installed/build artifacts (fresh
+# install happens in the image) and secrets.
+**/node_modules
+.git
+**/.env
+**/.env.*
+app/dist
+app/.expo
+server/web
+server/dist
+**/*.tsbuildinfo
+*.log
+.claude

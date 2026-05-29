@@ -5,7 +5,7 @@
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { AppRouter } from "rightnow-api";
 
-const DEFAULT_BASE_URL = "https://rightnow.filipkin.com";
+const DEFAULT_BASE_URL = "https://rightnow.filipkin.com/api";
 
 let baseUrl = DEFAULT_BASE_URL;
 let authToken: string | null = null;

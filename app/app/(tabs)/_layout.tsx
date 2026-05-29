@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import React from "react";
+import { Platform } from "react-native";
 
 import { makeTabItem } from "@/components/makeTabItem";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +10,10 @@ export default function TabLayout() {
 
   // Gate the app behind auth. While restoring a persisted session, render nothing.
   if (status === "loading") return null;
-  if (status === "unauthenticated") return <Redirect href="/auth/login" />;
+  // Web visitors land on the marketing page; the native app goes straight to login.
+  if (status === "unauthenticated") {
+    return <Redirect href={Platform.OS === "web" ? "/welcome" : "/auth/login"} />;
+  }
 
   return (
     <Tabs screenOptions={{ headerShown: false }}>
