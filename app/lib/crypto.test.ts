@@ -53,7 +53,7 @@ test("cell ids are stable, opaque, and per (date,hour)", () => {
 
 test("entry payload seals and opens", () => {
     const dek = generateDEK();
-    const payload: EntryPayload = { activity: 3, feeling: 4, source: "manual" };
+    const payload: EntryPayload = { date: "2026-5-28", hour: 9, activity: 3, feeling: 4, source: "manual" };
     const sealed = sealEntry(dek, payload);
     expect(sealed.ciphertext).toMatch(/^[0-9a-f]+$/);
     expect(openEntry(dek, sealed)).toEqual(payload);

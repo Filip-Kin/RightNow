@@ -7,6 +7,7 @@ import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useDate } from "@/lib/time";
 import { useRouter } from "expo-router";
+import { setEntry } from "@/lib/entries";
 
 interface Activity {
   name: string;
@@ -106,33 +107,15 @@ export default function Index() {
   const [selectedFeeling, setSelectedFeeling] = useState(-1);
 
   const handleContinue = () => {
-    // Handle the continue action
-    console.log("Activity:", selectedActivity);
-    console.log("Feeling:", feelingList[selectedFeeling]);
+    // Record the hour block currently shown (currentTime .. currentTime+1).
+    const date = `${currentTime.getFullYear()}-${currentTime.getMonth() + 1}-${currentTime.getDate()}`;
+    const activityIndex = activityList.findIndex((a) => a.name === selectedActivity);
 
-    // uhm yeah its actually pushed forward by one hour lol
-    const submitDate = new Date(currentTime.getTime() + (1_000 * 60 * 60));
-    const urls = [
-      `${config.endpoint}/waydrn/${submitDate.getFullYear()}-${submitDate.getMonth() + 1}-${submitDate.getDate()}/${submitDate.getHours()}/${activityList.findIndex((activity) => activity.name === selectedActivity) + 1}`,
-      `${config.endpoint}/hayfrn/${submitDate.getFullYear()}-${submitDate.getMonth() + 1}-${submitDate.getDate()}/${submitDate.getHours()}/${selectedFeeling + 1}`
-    ];
-    console.log(urls);
-
-    (async() => {
-      for (const url of urls) {
-        try {
-          const resp = await fetch(url, { method: 'POST', body: "abc" })
-          if (!resp.ok) {
-            throw new Error(`Failed to submit data to ${url}: ${resp.status} ${resp.statusText}`);
-          }
-          const result = await resp.text();
-          console.log('done!', result);
-        } catch (e) {
-          console.error(e);
-          alert(String(e));
-        }
-      }
-    })();
+    // Encrypt locally and push to the server (optimistic; offline-safe).
+    setEntry(date, currentTime.getHours(), activityIndex, selectedFeeling, "manual").catch((e) => {
+      console.error(e);
+      alert(String(e));
+    });
 
     setSelectedActivity(null);
     setSelectedFeeling(-1);

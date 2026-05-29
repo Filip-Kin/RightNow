@@ -3,18 +3,18 @@ import { useEffect, useState } from "react";
 import { useDate } from "./time";
 
 export interface Config {
-  endpoint: string;
-  lastSync: number;
+  lastSync: number; // "caught up through" anchor (epoch ms), advanced by logging + sync
   hour24: boolean;
+  reminderHour: number; // local hour (0-23) for the daily end-of-day reminder
 }
 
 const listeners = new Set<(config: Config) => void>();
 
 function parse(value: string | null): Config {
   const config = JSON.parse(value ?? "{}");
-  config.endpoint ??= "";
   config.lastSync ??= Date.now();
   config.hour24 ??= false;
+  config.reminderHour ??= 21;
   return config;
 }
 
@@ -47,6 +47,13 @@ const configHandlers: ProxyHandler<any> = {
 function update() {
   AsyncStorage.setItem("config", JSON.stringify(config));
   listeners.forEach((listener) => listener(config));
+}
+
+/** Advance the caught-up anchor to `ms` if it's later (used by sync). */
+export function setLastSyncAtLeast(ms: number) {
+  if (config && ms > config.lastSync) {
+    config.lastSync = ms;
+  }
 }
 
 export function resetConfig() {

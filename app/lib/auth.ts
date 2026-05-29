@@ -12,6 +12,7 @@ import {
     wrapDEK, unwrapDEK, dekToHex, dekFromHex,
 } from "./crypto";
 import { secureDelete, secureGet, secureSet } from "./storage";
+import { clearStore } from "./entries";
 
 const K = { session: "rn_session", dek: "rn_dek", email: "rn_email", userId: "rn_userId" } as const;
 
@@ -129,6 +130,7 @@ export async function logout(): Promise<void> {
     }
     setAuthToken(null);
     dek = null;
+    await clearStore(); // don't leave the previous user's decrypted entries on the device
     await Promise.all([secureDelete(K.session), secureDelete(K.dek), secureDelete(K.email), secureDelete(K.userId)]);
     setState({ status: "unauthenticated", email: null, userId: null });
 }

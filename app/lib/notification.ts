@@ -1,4 +1,4 @@
-// Schedule a notification every hour
+// One daily end-of-day reminder that deep-links into the hour-by-hour catch-up.
 import * as Notifications from "expo-notifications";
 import { NotificationPermissionsStatus } from "expo-notifications";
 import { useEffect, useState } from "react";
@@ -6,42 +6,44 @@ import { requestPermissionsAsync } from "expo-notifications";
 import { AppState } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 
-export async function scheduleHourlyNotification() {
+const DEFAULT_REMINDER_HOUR = 21;
+
+/** Schedule (or reschedule) the daily reminder at the given local hour. */
+export async function scheduleDailyReminder(hour: number = DEFAULT_REMINDER_HOUR) {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
 
-  await Notifications.cancelAllScheduledNotificationsAsync(); // Clear any previous schedules
+  await Notifications.cancelAllScheduledNotificationsAsync(); // replace any previous schedule
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "Right Now",
+      title: "RightNow",
+      body: "How was your day? Tap to fill in your hours.",
       badge: 1,
       data: {},
-      sticky: true,
       interruptionLevel: "active",
-      sound: false,
     },
     identifier: "right-now",
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+      hour,
       minute: 0,
       repeats: true,
     },
   });
 }
 
-export async function scheduleHourlyNotificationRightNow() {
+/** Fire a one-off notification in 5s, for testing from Settings. */
+export async function scheduleTestNotification() {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
 
-  await Notifications.cancelAllScheduledNotificationsAsync(); // Clear any previous schedules
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "Right Now",
+      title: "RightNow",
+      body: "How was your day? Tap to fill in your hours.",
       badge: 1,
       data: {},
-      sticky: true,
       interruptionLevel: "active",
-      sound: false,
     },
     identifier: "right-now",
     trigger: {
@@ -57,7 +59,7 @@ function getPermissionStatus() {
     if (!result.granted && result.canAskAgain) {
       requestNotificationPermissionsAsync();
     } else if (result.granted) {
-      scheduleHourlyNotification();
+      scheduleDailyReminder();
     }
   });
 }
@@ -86,6 +88,7 @@ export function useNotificationGrantedState(): NotificationPermissionsStatus {
 export async function requestNotificationPermissionsAsync() {
   const result = await requestPermissionsAsync();
   notificationStatePermission = result;
+  if (result.granted) scheduleDailyReminder();
   for (const listener of listeners) {
     listener(result);
   }

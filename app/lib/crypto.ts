@@ -102,6 +102,10 @@ export function cellId(dek: Uint8Array, date: string, hour: number): string {
 }
 
 export interface EntryPayload {
+    // date ("YYYY-M-D") + hour are encrypted in the payload too, so a fresh device
+    // can place a pulled cell (the cell_id HMAC is opaque and can't be reversed).
+    date: string;
+    hour: number;
     activity: number | null;
     feeling: number | null;
     source: "manual" | "health";

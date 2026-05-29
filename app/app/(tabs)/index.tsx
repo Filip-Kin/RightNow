@@ -1,11 +1,12 @@
 import { AnimatedText } from "@/components/AnimatedText";
 import { useHoursBehindCount } from "@/lib/config";
+import { sync } from "@/lib/entries";
 import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
 } from "@/lib/notification";
 import { useRouter } from "expo-router";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect } from "react";
 import {
   Button,
   SafeAreaView,
@@ -17,7 +18,10 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
 
-  const [randomNumber, setRandomNumber] = useState(Math.random());
+  // Pull remote changes (and push anything pending) when the home screen opens.
+  useEffect(() => {
+    sync().catch(() => {/* offline: local state still works */});
+  }, []);
 
   const behindCount = useHoursBehindCount();
 
