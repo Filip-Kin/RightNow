@@ -18,6 +18,7 @@ export default function TabLayout() {
   return (
     <Tabs screenOptions={{ headerShown: false }}>
       {makeTabItem({ name: "index", title: "Right Now", icon: "home" })}
+      {makeTabItem({ name: "history", title: "History", icon: "grid-on" })}
       {makeTabItem({ name: "settings", title: "Settings", icon: "settings" })}
     </Tabs>
   );

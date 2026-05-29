@@ -1,7 +1,9 @@
 import React from "react";
 import { Text, StyleSheet, Button, View, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 import { resetConfig, useConfig } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Icon } from "@/components/Icon";
 import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
 import { logout, useAuth } from "@/lib/auth";
 
@@ -14,6 +16,7 @@ function formatHour(hour: number, hour24: boolean): string {
 export default function Settings() {
   const config = useConfig();
   const { email } = useAuth();
+  const router = useRouter();
 
   function setReminderHour(next: number) {
     const hour = (next + 24) % 24;
@@ -44,6 +47,18 @@ export default function Settings() {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.label}>Data</Text>
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>
+        <Icon name="category" style={{ color: "#3c4043" }} />
+        <Text style={styles.navText}>Edit activities</Text>
+        <Icon name="chevron-right" style={{ color: "#9aa0a6" }} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/import")}>
+        <Icon name="upload-file" style={{ color: "#3c4043" }} />
+        <Text style={styles.navText}>Import data (CSV)</Text>
+        <Icon name="chevron-right" style={{ color: "#9aa0a6" }} />
+      </TouchableOpacity>
+
       <View style={styles.spacer} />
       <Button title={"Send Test Notification"} onPress={() => { scheduleTestNotification(); }} />
       <Button title={"Reset Settings"} onPress={() => { resetConfig(); }} />
@@ -64,6 +79,8 @@ const styles = StyleSheet.create({
   stepper: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#1a73e8", alignItems: "center", justifyContent: "center" },
   stepperText: { color: "#fff", fontSize: 24, fontWeight: "700", lineHeight: 26 },
   reminderValue: { fontSize: 18, fontWeight: "600", color: "#111", minWidth: 90, textAlign: "center" },
+  navItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#eee" },
+  navText: { flex: 1, fontSize: 16, color: "#111" },
   spacer: { height: 28 },
   account: { marginTop: "auto", paddingTop: 24 },
   accountText: { fontSize: 14, color: "#5f6368", marginBottom: 8 },

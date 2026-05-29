@@ -1,20 +1,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
-import { useDate } from "./time";
 
 export interface Config {
-  lastSync: number; // "caught up through" anchor (epoch ms), advanced by logging + sync
   hour24: boolean;
   reminderHour: number; // local hour (0-23) for the daily end-of-day reminder
+  // How far back the catch-up flow looks for unlogged hours. Bounds the "to log"
+  // count so a year-old import never demands thousands of entries.
+  catchUpWindowHours: number;
 }
 
 const listeners = new Set<(config: Config) => void>();
 
 function parse(value: string | null): Config {
   const config = JSON.parse(value ?? "{}");
-  config.lastSync ??= Date.now();
   config.hour24 ??= false;
   config.reminderHour ??= 21;
+  config.catchUpWindowHours ??= 24;
   return config;
 }
 
@@ -49,13 +50,6 @@ function update() {
   listeners.forEach((listener) => listener(config));
 }
 
-/** Advance the caught-up anchor to `ms` if it's later (used by sync). */
-export function setLastSyncAtLeast(ms: number) {
-  if (config && ms > config.lastSync) {
-    config.lastSync = ms;
-  }
-}
-
 export function resetConfig() {
   config = new Proxy(
     parse(null),
@@ -80,15 +74,4 @@ export function useConfig() {
   }, []);
 
   return config;
-}
-
-export function useHoursBehindCount() {
-  const config = useConfig();
-  const date = useDate('hourly');
-
-  return hoursBehindCount(config.lastSync, date.getTime());
-}
-
-export function hoursBehindCount(lastSync: number, date: number) {
-  return Math.floor((date - lastSync) / 1000 / 60 / 60)
 }

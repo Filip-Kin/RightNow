@@ -25,6 +25,8 @@
     "@trpc/client": "^11.17.0",
     "expo": "^56",
     "expo-constants": "~56.0.16",
+    "expo-document-picker": "~56.0.4",
+    "expo-file-system": "~56.0.7",
     "expo-font": "~56.0.5",
     "expo-linking": "~56.0.12",
     "expo-notifications": "~56.0.14",

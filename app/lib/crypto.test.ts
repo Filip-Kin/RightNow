@@ -1,8 +1,8 @@
 // Run: bun test lib/crypto.test.ts   (bun's runner; independent of jest-expo)
 import { expect, test } from "bun:test";
 import {
-    cellId, deriveFromSecret, generateDEK, generateRecoveryCode,
-    normalizeRecoveryCode, openEntry, sealEntry, unwrapDEK, wrapDEK,
+    cellId, configCellId, deriveFromSecret, generateDEK, generateRecoveryCode,
+    normalizeRecoveryCode, openEntry, openJson, sealEntry, sealJson, unwrapDEK, wrapDEK,
     dekToHex, dekFromHex, type EntryPayload,
 } from "./crypto";
 
@@ -59,6 +59,33 @@ test("entry payload seals and opens", () => {
     expect(openEntry(dek, sealed)).toEqual(payload);
     // another DEK cannot open it
     expect(() => openEntry(generateDEK(), sealed)).toThrow();
+});
+
+test("sealed entry length is constant across values (padding hides the value)", () => {
+    const dek = generateDEK();
+    const variants: EntryPayload[] = [
+        { date: "2026-1-1", hour: 0, activity: 0, feeling: 0, source: "manual" },
+        { date: "2026-12-31", hour: 23, activity: 10, feeling: 5, source: "health" },
+        { date: "2026-6-9", hour: 9, activity: null, feeling: null, source: "manual" },
+    ];
+    const lengths = new Set(variants.map((p) => sealEntry(dek, p).ciphertext.length));
+    expect(lengths.size).toBe(1); // every entry encrypts to the same ciphertext length
+});
+
+test("config cell id is stable, opaque, and distinct from entry cells", () => {
+    const dek = generateDEK();
+    expect(configCellId(dek)).toBe(configCellId(dek));
+    expect(configCellId(dek)).toMatch(/^[0-9a-f]{64}$/);
+    expect(configCellId(dek)).not.toBe(cellId(dek, "2026-5-28", 9));
+    expect(configCellId(generateDEK())).not.toBe(configCellId(dek));
+});
+
+test("sealJson/openJson round-trips the taxonomy config", () => {
+    const dek = generateDEK();
+    const config = { version: 1, activities: [{ index: 0, name: "Sleep", color: "#273036", icon: "bed" }] };
+    const sealed = sealJson(dek, config);
+    expect(openJson<typeof config>(dek, sealed)).toEqual(config);
+    expect(() => openJson(generateDEK(), sealed)).toThrow();
 });
 
 test("DEK hex persistence round-trips", () => {

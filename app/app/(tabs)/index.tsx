@@ -1,6 +1,6 @@
 import { AnimatedText } from "@/components/AnimatedText";
-import { useHoursBehindCount } from "@/lib/config";
-import { sync } from "@/lib/entries";
+import { useConfig } from "@/lib/config";
+import { sync, useUnloggedHours } from "@/lib/entries";
 import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
@@ -23,7 +23,8 @@ export default function HomeScreen() {
     sync().catch(() => {/* offline: local state still works */});
   }, []);
 
-  const behindCount = useHoursBehindCount();
+  const config = useConfig();
+  const behindCount = useUnloggedHours(config.catchUpWindowHours).length;
 
   return (
     <SafeAreaView>

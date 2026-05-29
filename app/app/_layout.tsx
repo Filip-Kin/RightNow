@@ -27,6 +27,8 @@ export default function RootLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen name="activities" options={{ title: "Activities" }} />
+      <Stack.Screen name="import" options={{ title: "Import data" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

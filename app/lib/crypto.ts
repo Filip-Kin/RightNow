@@ -101,6 +101,17 @@ export function cellId(dek: Uint8Array, date: string, hour: number): string {
     return bytesToHex(hmac(sha256, cellKey, utf8ToBytes(`${date}|${hour}`)));
 }
 
+/**
+ * Stable id for the single per-user taxonomy (custom activities) cell. It rides
+ * the same opaque entries table, so syncing custom activities needs no backend
+ * change. The HMAC input can't be produced by cellId() (whose input is
+ * "YYYY-M-D|<number>"), so it never collides with a real (date, hour) cell.
+ */
+export function configCellId(dek: Uint8Array): string {
+    const { cellKey } = dekSubkeys(dek);
+    return bytesToHex(hmac(sha256, cellKey, utf8ToBytes("config|activities")));
+}
+
 export interface EntryPayload {
     // date ("YYYY-M-D") + hour are encrypted in the payload too, so a fresh device
     // can place a pulled cell (the cell_id HMAC is opaque and can't be reversed).
@@ -111,14 +122,50 @@ export interface EntryPayload {
     source: "manual" | "health";
 }
 
+// AEAD reveals plaintext length, and an EntryPayload's JSON length varies slightly
+// with its values (activity "10" vs "3", 1- vs 2-digit hour, null vs a number).
+// PKCS#7-pad to a fixed block so every entry cell is the same ciphertext length
+// regardless of content, closing that side channel. 128 comfortably exceeds any
+// realistic payload, so each entry pads to exactly one block.
+const ENTRY_BLOCK = 128;
+
+function padPKCS7(data: Uint8Array, block: number): Uint8Array {
+    const padLen = block - (data.length % block); // 1..block (full block when aligned)
+    const out = new Uint8Array(data.length + padLen);
+    out.set(data);
+    out.fill(padLen, data.length);
+    return out;
+}
+
+function unpadPKCS7(data: Uint8Array): Uint8Array {
+    const padLen = data[data.length - 1];
+    if (padLen < 1 || padLen > data.length) throw new Error("Invalid padding");
+    return data.subarray(0, data.length - padLen);
+}
+
 export function sealEntry(dek: Uint8Array, payload: EntryPayload): Sealed {
     const { dataKey } = dekSubkeys(dek);
-    return seal(dataKey, utf8ToBytes(JSON.stringify(payload)));
+    return seal(dataKey, padPKCS7(utf8ToBytes(JSON.stringify(payload)), ENTRY_BLOCK));
 }
 
 export function openEntry(dek: Uint8Array, sealed: Sealed): EntryPayload {
     const { dataKey } = dekSubkeys(dek);
-    return JSON.parse(bytesToUtf8(open(dataKey, sealed)));
+    return JSON.parse(bytesToUtf8(unpadPKCS7(open(dataKey, sealed))));
+}
+
+/**
+ * Generic encrypted-JSON helpers over the same dataKey, for the taxonomy config
+ * cell. Not length-padded: it's a single per-user cell, so its size (roughly the
+ * activity count) isn't a meaningful leak, unlike the per-hour entry cells.
+ */
+export function sealJson(dek: Uint8Array, obj: unknown): Sealed {
+    const { dataKey } = dekSubkeys(dek);
+    return seal(dataKey, utf8ToBytes(JSON.stringify(obj)));
+}
+
+export function openJson<T>(dek: Uint8Array, sealed: Sealed): T {
+    const { dataKey } = dekSubkeys(dek);
+    return JSON.parse(bytesToUtf8(open(dataKey, sealed))) as T;
 }
 
 // Persisted as hex strings (e.g. the cached DEK in secure storage).
