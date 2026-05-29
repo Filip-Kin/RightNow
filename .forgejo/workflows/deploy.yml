@@ -22,3 +22,8 @@ jobs:
           docker build -t "$IMAGE:latest" -t "$IMAGE:${{ github.sha }}" .
           docker push "$IMAGE:latest"
           docker push "$IMAGE:${{ github.sha }}"
+
+      - name: Trigger Coolify deploy (cloud pulls the new image)
+        run: |
+          curl -fsSL -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://panel.filipkin.com/api/v1/deploy?uuid=${{ secrets.COOLIFY_APP_UUID }}&force=false"
