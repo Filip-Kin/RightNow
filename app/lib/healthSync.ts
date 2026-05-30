@@ -3,7 +3,7 @@
 // ones with the configured Sleep activity. Safe to call repeatedly (on toggle,
 // on "Sync now", and on app foreground); it's a no-op when disabled.
 import { ensureConfig, getConfig } from "./config";
-import { isHealthAvailable, requestSleepPermission, readSleepSessions } from "./health";
+import { isHealthAvailable, hasSleepPermission, requestSleepPermission, readSleepSessions } from "./health";
 import { sleepHours } from "./sleepFill";
 import { fillHealthSleep } from "./entries";
 
@@ -20,11 +20,20 @@ export interface HealthSyncResult {
   reason?: "disabled" | "unavailable" | "denied" | "error";
 }
 
+interface SyncOptions {
+  // Whether we may show the Health Connect permission UI. Only the explicit
+  // Settings actions (toggle / "Sync sleep now") set this; the automatic
+  // foreground path NEVER prompts (it only reads if already granted), so a
+  // background path can't pop a system dialog or trip the permission flow.
+  prompt?: boolean;
+}
+
 /**
  * Run one sleep sync. `now` is injectable for tests. Returns how many hours were
  * filled. Coalesces concurrent calls so a foreground + manual tap don't double-run.
  */
-export async function syncHealthSleep(now = Date.now()): Promise<HealthSyncResult> {
+export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}): Promise<HealthSyncResult> {
+  const wantPrompt = opts.prompt === true;
   const cfg = await ensureConfig();
   if (!cfg.healthSleepEnabled) return { ok: false, filled: 0, reason: "disabled" };
   if (inFlight) {
@@ -33,7 +42,8 @@ export async function syncHealthSleep(now = Date.now()): Promise<HealthSyncResul
   }
   const run = (async () => {
     if (!(await isHealthAvailable())) throw new Error("unavailable");
-    if (!(await requestSleepPermission())) throw new Error("denied");
+    const granted = wantPrompt ? await requestSleepPermission() : await hasSleepPermission();
+    if (!granted) throw new Error("denied");
     const sessions = await readSleepSessions(now - BACKFILL_DAYS * DAY_MS, now);
     const slots = sleepHours(sessions);
     const filled = await fillHealthSleep(slots, cfg.sleepActivityIndex);
@@ -52,10 +62,17 @@ export async function syncHealthSleep(now = Date.now()): Promise<HealthSyncResul
   }
 }
 
-/** Foreground hook: sync if enabled and the last read is stale. Fire-and-forget. */
+/**
+ * Foreground hook: fire-and-forget. Deliberately conservative — it does nothing
+ * until a manual sync has already succeeded once (`lastHealthSyncAt > 0`), so the
+ * app never touches the Health Connect native layer automatically on startup.
+ * That's what guarantees a Health problem can't put the app in a launch crash
+ * loop: the risky path only runs after the user has confirmed it works once.
+ */
 export function maybeSyncHealthOnForeground(now = Date.now()): void {
   const cfg = getConfig();
   if (!cfg?.healthSleepEnabled) return;
-  if (now - (cfg.lastHealthSyncAt ?? 0) < FOREGROUND_MIN_INTERVAL_MS) return;
-  void syncHealthSleep(now);
+  if (!(cfg.lastHealthSyncAt > 0)) return; // never auto-run before a successful manual sync
+  if (now - cfg.lastHealthSyncAt < FOREGROUND_MIN_INTERVAL_MS) return;
+  void syncHealthSleep(now, { prompt: false });
 }

@@ -48,7 +48,7 @@ export default function Settings() {
   const [hcAvailable, setHcAvailable] = useState<boolean | null>(null);
   const [sleepBusy, setSleepBusy] = useState(false);
   const [sleepMsg, setSleepMsg] = useState<string | null>(null);
-  useEffect(() => { isHealthAvailable().then(setHcAvailable); }, []);
+  useEffect(() => { isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false)); }, []);
 
   function setReminderHour(next: number) {
     const hour = (next + 24) % 24;
@@ -59,7 +59,7 @@ export default function Settings() {
   async function runSleepSync(): Promise<void> {
     setSleepBusy(true);
     setSleepMsg(null);
-    const r = await syncHealthSleep();
+    const r = await syncHealthSleep(Date.now(), { prompt: true });
     setSleepBusy(false);
     if (r.ok) {
       setSleepMsg(r.filled > 0 ? `Filled ${r.filled} sleep hour${r.filled === 1 ? "" : "s"}.` : "No new sleep hours to fill.");
@@ -71,13 +71,21 @@ export default function Settings() {
       config.healthSleepEnabled = false;
     } else {
       setSleepMsg("Couldn't read sleep data. Try again.");
+      config.healthSleepEnabled = false;
     }
   }
 
   function toggleSleep(next: boolean) {
-    config.healthSleepEnabled = next;
     setSleepMsg(null);
-    if (next) void runSleepSync();
+    if (!next) {
+      config.healthSleepEnabled = false;
+      return;
+    }
+    // Enable, then prove the Health Connect path works on this device before
+    // leaving it on. runSleepSync() flips the flag back off on any failure, so a
+    // refused/unavailable permission never leaves the feature half-enabled.
+    config.healthSleepEnabled = true;
+    void runSleepSync();
   }
 
   async function toggleHourly(next: boolean) {

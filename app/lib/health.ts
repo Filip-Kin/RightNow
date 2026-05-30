@@ -10,6 +10,11 @@ export async function isHealthAvailable(): Promise<boolean> {
   return false;
 }
 
+/** Whether sleep read access is already granted (never shows UI). */
+export async function hasSleepPermission(): Promise<boolean> {
+  return false;
+}
+
 /** Prompt for read access to sleep data. Resolves true if granted. */
 export async function requestSleepPermission(): Promise<boolean> {
   return false;

@@ -40,6 +40,15 @@ function hasSleepRead(perms: { accessType: string; recordType: string }[]): bool
   return perms.some((p) => p.accessType === "read" && p.recordType === "SleepSession");
 }
 
+export async function hasSleepPermission(): Promise<boolean> {
+  if (!(await ensureInit())) return false;
+  try {
+    return hasSleepRead(await getGrantedPermissions());
+  } catch {
+    return false;
+  }
+}
+
 export async function requestSleepPermission(): Promise<boolean> {
   if (!(await ensureInit())) return false;
   try {
