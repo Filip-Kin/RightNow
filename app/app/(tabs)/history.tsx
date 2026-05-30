@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
@@ -28,6 +29,7 @@ interface DayRow {
 }
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const entries = useEntries();
   const notes = useNotes();
   useActivities(); // re-render on taxonomy edits (colors/names)
@@ -118,12 +120,17 @@ export default function HistoryScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity
-          style={styles.modeBtn}
-          onPress={() => setMode((m) => (m === "activity" ? "feeling" : "activity"))}
-        >
-          <Text style={styles.modeText}>{mode === "activity" ? "Activity" : "Feeling"}</Text>
-        </TouchableOpacity>
+        <View style={styles.controlsRight}>
+          <TouchableOpacity style={styles.modeBtn} onPress={() => router.push("/year")}>
+            <Text style={styles.modeText}>Year ▸</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.modeBtn}
+            onPress={() => setMode((m) => (m === "activity" ? "feeling" : "activity"))}
+          >
+            <Text style={styles.modeText}>{mode === "activity" ? "Activity" : "Feeling"}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Hour header (aligned with the rows below via the same fixed label width + flex cells). */}
@@ -284,6 +291,7 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 18, fontWeight: "700", color: "#111" },
   summaryLabel: { fontSize: 11, color: "#5f6368", marginTop: 2 },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10 },
+  controlsRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, overflow: "hidden" },
   segItem: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: "#fff" },
   segItemActive: { backgroundColor: "#1a73e8" },
