@@ -44,6 +44,7 @@ export default function LoginScreen() {
       />
       <PrimaryButton title="Sign in" onPress={onSubmit} loading={busy} disabled={!email || !password} />
       <LinkButton title="Forgot password?" onPress={() => router.push("/auth/forgot")} />
+      <LinkButton title="Sign in with another device" onPress={() => router.push("/auth/link")} />
       <LinkButton title="Create an account" onPress={() => router.push("/auth/signup")} />
     </AuthScreen>
   );

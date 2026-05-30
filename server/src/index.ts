@@ -1,11 +1,13 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { authRouter } from './router/auth';
 import { entriesRouter } from './router/entries';
+import { linkRouter } from './router/link';
 import { createContext, router } from './trpc';
 
 const appRouter = router({
     auth: authRouter,
     entries: entriesRouter,
+    link: linkRouter,
 });
 export type AppRouter = typeof appRouter;
 

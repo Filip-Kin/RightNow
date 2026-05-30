@@ -82,6 +82,11 @@ export default function Settings() {
         <Text style={styles.navText}>Import data (CSV)</Text>
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/link")}>
+        <Icon name="qr-code-2" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Link a device</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
 
       <View style={styles.spacer} />
       <Button title={"Send Test Notification"} onPress={() => { scheduleTestNotification(); }} />

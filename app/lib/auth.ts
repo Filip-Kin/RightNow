@@ -10,6 +10,8 @@ import { trpc, setAuthToken } from "./trpc";
 import {
     deriveFromSecret, generateDEK, generateRecoveryCode, normalizeRecoveryCode,
     wrapDEK, unwrapDEK, dekToHex, dekFromHex,
+    generateLinkKeypair, linkSharedKey, sealWithKey, openWithKey, randomChannelId,
+    toHex, fromHex,
 } from "./crypto";
 import { secureDelete, secureGet, secureSet } from "./storage";
 import { clearStore } from "./entries";
@@ -136,6 +138,106 @@ export async function logout(): Promise<void> {
     await Promise.all([secureDelete(K.session), secureDelete(K.dek), secureDelete(K.email), secureDelete(K.userId)]);
     setState({ status: "unauthenticated", email: null, userId: null });
 }
+
+// #region device link (QR cross-device sign-in)
+// Direction-agnostic: one device shows a QR, the other scans it (so the phone can
+// always be the camera). Whichever device is signed in is the "giver" and seals a
+// fresh session token + the DEK to the new device over an ECDH-derived key; the
+// server only relays ciphertext (see server/src/router/link.ts).
+interface LinkQr { v: 1; c: string; k: string } // version, channelId, shower pubkey (hex)
+interface LinkBundle { token: string; userId: string; email: string; dek: string }
+
+const isGiver = () => state.status === "authenticated";
+
+function makeBundle(shared: Uint8Array, token: string, userId: string) {
+    const dek = getDEK();
+    if (!dek) throw new Error("Locked: sign in first");
+    const bundle: LinkBundle = { token, userId, email: state.email ?? "", dek: dekToHex(dek) };
+    return sealWithKey(shared, bundle);
+}
+
+async function receiveBundle(shared: Uint8Array, ciphertext: string, nonce: string) {
+    const bundle = openWithKey<LinkBundle>(shared, { ciphertext, nonce });
+    await persistSession(bundle.token, dekFromHex(bundle.dek), bundle.email, bundle.userId);
+}
+
+export interface ShowLink {
+    qrValue: string;
+    giver: boolean;
+    /** Poll once. "waiting" until the other device acts; "linked" = we just signed
+     *  in (receiver); "delivered" = we handed off our session (giver). */
+    poll: () => Promise<"waiting" | "linked" | "delivered">;
+}
+
+/** Show side: become the QR displayer. Works whether we're the giver or receiver. */
+export function startShowLink(): ShowLink {
+    const { secretKey, publicKey } = generateLinkKeypair();
+    const channelId = randomChannelId();
+    const giver = isGiver();
+    const qrValue = JSON.stringify({ v: 1, c: channelId, k: toHex(publicKey) } satisfies LinkQr);
+
+    async function poll(): Promise<"waiting" | "linked" | "delivered"> {
+        const rec = await trpc.link.peek.query({ channelId });
+        if (!rec) return "waiting";
+        if (giver) {
+            if (rec.ciphertext) return "delivered"; // already handed off
+            if (rec.scannerPubKey) {
+                const shared = linkSharedKey(secretKey, fromHex(rec.scannerPubKey));
+                const { token, userId } = await trpc.link.newSession.mutate();
+                const sealed = makeBundle(shared, token, userId);
+                await trpc.link.deposit.mutate({ channelId, ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+                return "delivered";
+            }
+            return "waiting";
+        }
+        if (rec.ciphertext && rec.nonce && rec.scannerPubKey) {
+            const shared = linkSharedKey(secretKey, fromHex(rec.scannerPubKey));
+            await receiveBundle(shared, rec.ciphertext, rec.nonce);
+            return "linked";
+        }
+        return "waiting";
+    }
+    return { qrValue, giver, poll };
+}
+
+export interface ScanLink {
+    giver: boolean;
+    /** "linked" = signed in now (receiver); "delivered" = handed off (giver);
+     *  "pending" = our key is posted, keep polling (receiver waiting on the giver). */
+    status: "linked" | "delivered" | "pending";
+    poll?: () => Promise<"waiting" | "linked">;
+}
+
+/** Scan side: handle a scanned QR. Works whether we're the giver or receiver. */
+export async function startScanLink(qrValue: string): Promise<ScanLink> {
+    let qr: LinkQr;
+    try { qr = JSON.parse(qrValue); } catch { throw new Error("That isn't a RightNow link code."); }
+    if (qr?.v !== 1 || typeof qr.c !== "string" || typeof qr.k !== "string") {
+        throw new Error("Unrecognized link code.");
+    }
+    const { secretKey, publicKey } = generateLinkKeypair();
+    const shared = linkSharedKey(secretKey, fromHex(qr.k));
+
+    if (isGiver()) {
+        const { token, userId } = await trpc.link.newSession.mutate();
+        const sealed = makeBundle(shared, token, userId);
+        await trpc.link.deposit.mutate({ channelId: qr.c, scannerPubKey: toHex(publicKey), ciphertext: sealed.ciphertext, nonce: sealed.nonce });
+        return { giver: true, status: "delivered" };
+    }
+
+    // Receiver: post our key, then poll for the giver's sealed bundle.
+    await trpc.link.deposit.mutate({ channelId: qr.c, scannerPubKey: toHex(publicKey) });
+    async function poll(): Promise<"waiting" | "linked"> {
+        const rec = await trpc.link.peek.query({ channelId: qr.c });
+        if (rec?.ciphertext && rec.nonce) {
+            await receiveBundle(shared, rec.ciphertext, rec.nonce);
+            return "linked";
+        }
+        return "waiting";
+    }
+    return { giver: false, status: "pending", poll };
+}
+// #endregion
 
 /** Subscribe to auth state in a component. */
 export function useAuth(): AuthState {

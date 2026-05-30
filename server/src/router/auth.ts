@@ -20,7 +20,7 @@ const wrappedDek = {
     wrappedDekRcNonce: z.string().max(512),
 };
 
-async function mintToken(userId: string, kind: 'session' | 'recovery', ip: string) {
+export async function mintToken(userId: string, kind: 'session' | 'recovery', ip: string) {
     const token = randomBytes(32).toString('hex');
     const ttl = kind === 'recovery' ? RECOVERY_TTL_MS : SESSION_TTL_MS;
     await db.insert(tokensTable).values({
