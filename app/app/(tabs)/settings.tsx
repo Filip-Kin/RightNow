@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator } from "react-native";
+import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert } from "react-native";
+import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
+import { refreshHourlyReminder } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable } from "@/lib/health";
@@ -78,6 +80,19 @@ export default function Settings() {
     if (next) void runSleepSync();
   }
 
+  async function toggleHourly(next: boolean) {
+    if (next) {
+      let perm = await Notifications.getPermissionsAsync();
+      if (!perm.granted && perm.canAskAgain) perm = await Notifications.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Notifications are off", "Enable notifications for RightNow in your device settings to get the hourly check-in.");
+        return;
+      }
+    }
+    config.hourlyReminderEnabled = next;
+    await refreshHourlyReminder();
+  }
+
   return (
     <ScreenContainer>
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -128,6 +143,18 @@ export default function Settings() {
         <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
           <Text style={styles.stepperText}>+</Text>
         </TouchableOpacity>
+      </View>
+
+      <Text style={styles.label}>Hourly check-in</Text>
+      <View style={styles.sleepRow}>
+        <Text style={styles.sleepDesc}>
+          A nudge at the end of each hour to log what you're doing. One notification that updates to "the last N hours" until you catch up.
+        </Text>
+        <Switch
+          value={config.hourlyReminderEnabled}
+          onValueChange={(v) => { void toggleHourly(v); }}
+          trackColor={{ true: c.primary, false: c.border }}
+        />
       </View>
 
       {hcAvailable ? (

@@ -6,6 +6,10 @@ export type ThemePref = "light" | "dark" | "system";
 export interface Config {
   hour24: boolean;
   reminderHour: number; // local hour (0-23) for the daily end-of-day reminder
+  // Nudge at the end of every hour to log the current hour. A single high-priority
+  // notification that escalates ("last N hours") while ignored and clears once
+  // you've caught up. Opt-in.
+  hourlyReminderEnabled: boolean;
   // How far back the catch-up flow looks for unlogged hours. Bounds the "to log"
   // count so a year-old import never demands thousands of entries.
   catchUpWindowHours: number;
@@ -24,6 +28,7 @@ function parse(value: string | null): Config {
   const config = JSON.parse(value ?? "{}");
   config.hour24 ??= false;
   config.reminderHour ??= 21;
+  config.hourlyReminderEnabled ??= false;
   config.catchUpWindowHours ??= 24;
   config.theme ??= "system";
   config.healthSleepEnabled ??= false;

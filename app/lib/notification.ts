@@ -174,7 +174,9 @@ export function useNotificationResponseHandler() {
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const { notification } = response;
-      if (notification.request.identifier === "right-now") {
+      const id = notification.request.identifier;
+      const kind = (notification.request.content.data as { kind?: string })?.kind;
+      if (id === "right-now" || id === "right-now-hourly" || kind === "hourly") {
       if((nav.getState()?.routes.length ?? 0) === 0) {
         router.replace("/");
       }

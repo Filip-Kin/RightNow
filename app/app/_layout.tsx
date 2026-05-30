@@ -6,6 +6,7 @@ import { AppState } from "react-native";
 import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
 import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
+import { refreshHourlyReminder } from "@/lib/hourlyReminder";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
@@ -14,8 +15,12 @@ export default function RootLayout() {
   useEffect(() => {
     restoreSession();
     maybeSyncHealthOnForeground();
+    refreshHourlyReminder();
     const sub = AppState.addEventListener("change", (s) => {
-      if (s === "active") maybeSyncHealthOnForeground();
+      if (s === "active") {
+        maybeSyncHealthOnForeground();
+        refreshHourlyReminder();
+      }
     });
     return () => sub.remove();
   }, []);

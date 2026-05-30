@@ -48,6 +48,8 @@
         }
       ],
       "expo-notifications",
+      "expo-task-manager",
+      "expo-background-fetch",
       "react-native-health-connect",
       "./plugins/withHealthConnectQueries",
       [

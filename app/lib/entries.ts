@@ -178,6 +178,25 @@ export function getUnloggedHours(windowHours: number, now: number): HourSlot[] {
     return out;
 }
 
+/**
+ * How many consecutive most-recent fully-elapsed hours have no entry, capped at
+ * `cap`. This is the "you're N hours behind" streak driving the hourly nudge.
+ * Returns 0 when locked (no DEK) so we never escalate on undecryptable data.
+ */
+export function trailingUnloggedStreak(cap: number, now: number): number {
+    if (!getDEK()) return 0;
+    const hourStart = new Date(now);
+    hourStart.setMinutes(0, 0, 0); // start of the current (in-progress) hour
+    let streak = 0;
+    for (let i = 1; i <= cap; i++) {
+        const t = new Date(hourStart.getTime() - i * HOUR_MS);
+        const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
+        if (getEntry(date, t.getHours())) break;
+        streak++;
+    }
+    return streak;
+}
+
 /** Whether the local store has finished its initial load (vs. still empty). */
 export function getStoreLoaded(): boolean {
     return loaded;
