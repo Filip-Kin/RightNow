@@ -287,31 +287,50 @@ subscribeTaxonomy(() => {
     if (taxonomyDirty()) schedulePush();
 });
 
-/** Push dirty cells (and the taxonomy config cell if edited). LWW on updatedAt. */
-export async function push(): Promise<void> {
-    const dek = getDEK();
-    if (!dek) return;
-    const ids = [...dirty];
-    const records = ids.map((id) => {
-        const e = store[id];
-        const payload: EntryPayload = { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source };
-        const sealed = sealEntry(dek, payload);
-        return { cellId: id, ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: e.deleted, updatedAt: e.updatedAt };
-    });
-    const noteDates = [...noteDirty];
-    for (const d of noteDates) {
-        const n = notes[d];
-        const sealed = sealNote(dek, { date: d, note: n.text });
-        records.push({ cellId: noteCellId(dek, d), ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: !n.text, updatedAt: n.updatedAt });
-    }
-    const pushTaxonomy = taxonomyDirty();
-    if (pushTaxonomy) records.push(taxonomySealedRecord(dek));
-    if (records.length === 0) return;
+// The server caps each push at 500 records, so a large import (years of hourly
+// cells) must go up in batches - sending them all at once was silently rejected.
+const PUSH_CHUNK = 500;
+let pushing = false;
 
-    await trpc.entries.push.mutate({ records });
-    for (const id of ids) dirty.delete(id);
-    for (const d of noteDates) noteDirty.delete(d);
-    if (pushTaxonomy) markTaxonomyClean();
+interface PushRecord { cellId: string; ciphertext: string; nonce: string; deleted: boolean; updatedAt: number }
+
+/**
+ * Push dirty cells (+ dirty notes + the taxonomy config cell) in <=500-record
+ * batches; each batch's dirty flags clear only on its success, so a failure just
+ * leaves the rest to retry. LWW on updatedAt server-side. `onProgress(sent,total)`
+ * lets a restore show a progress bar. Re-entrancy-guarded.
+ */
+export async function push(onProgress?: (sent: number, total: number) => void): Promise<void> {
+    const dek = getDEK();
+    if (!dek || pushing) return;
+    pushing = true;
+    try {
+        const items: { record: PushRecord; clear: () => void }[] = [];
+        for (const id of [...dirty]) {
+            const e = store[id];
+            const sealed = sealEntry(dek, { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source });
+            items.push({ record: { cellId: id, ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: e.deleted, updatedAt: e.updatedAt }, clear: () => dirty.delete(id) });
+        }
+        for (const d of [...noteDirty]) {
+            const n = notes[d];
+            const sealed = sealNote(dek, { date: d, note: n.text });
+            items.push({ record: { cellId: noteCellId(dek, d), ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: !n.text, updatedAt: n.updatedAt }, clear: () => noteDirty.delete(d) });
+        }
+        if (taxonomyDirty()) {
+            items.push({ record: taxonomySealedRecord(dek), clear: () => markTaxonomyClean() });
+        }
+        if (items.length === 0) return;
+
+        onProgress?.(0, items.length);
+        for (let i = 0; i < items.length; i += PUSH_CHUNK) {
+            const slice = items.slice(i, i + PUSH_CHUNK);
+            await trpc.entries.push.mutate({ records: slice.map((x) => x.record) });
+            for (const x of slice) x.clear();
+            onProgress?.(Math.min(i + slice.length, items.length), items.length);
+        }
+    } finally {
+        pushing = false;
+    }
 }
 
 /** Push local changes, pull remote changes (LWW merge), advance the caught-up anchor. */

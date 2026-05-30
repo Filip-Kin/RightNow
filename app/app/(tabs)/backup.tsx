@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import { File as FsFile } from "expo-file-system";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { getAllEntries, getNotes, importEntries, importNotes, loadStore, useEntries, useNotes } from "@/lib/entries";
+import { getAllEntries, getNotes, importEntries, importNotes, loadStore, push, useEntries, useNotes } from "@/lib/entries";
 import { getActivities, setActivities, useActivities } from "@/lib/activities";
 import { serializeBackup, parseBackup, backupFilename } from "@/lib/backup";
 import { saveExport } from "@/lib/share";
@@ -44,6 +44,7 @@ export default function BackupScreen() {
   const notes = useNotes();
   const activities = useActivities();
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,8 +82,13 @@ export default function BackupScreen() {
       if (parsed.activities.length) setActivities(parsed.activities);
       const n = await importEntries(parsed.entries);
       const m = await importNotes(parsed.notes);
-      setMsg(`Restored ${n} entr${n === 1 ? "y" : "ies"}, ${parsed.activities.length} activities${m ? `, ${m} note${m === 1 ? "" : "s"}` : ""}. Syncing to your account…`);
+      // Push to the server now (in <=500 batches) with a progress bar, instead of
+      // leaving it to the silent background push.
+      await push((sent, total) => setProgress({ sent, total }));
+      setProgress(null);
+      setMsg(`Restored and synced ${n} entr${n === 1 ? "y" : "ies"}, ${parsed.activities.length} activities${m ? `, ${m} note${m === 1 ? "" : "s"}` : ""}.`);
     } catch (e) {
+      setProgress(null);
       setError(e instanceof Error ? e.message : "Restore failed.");
     } finally {
       setBusy(false);
@@ -124,6 +130,15 @@ export default function BackupScreen() {
             {busy ? <ActivityIndicator color={c.primary} /> : <Text style={styles.outlineText}>Restore from backup</Text>}
           </TouchableOpacity>
 
+          {progress && (
+            <View style={styles.progressWrap}>
+              <Text style={styles.progressText}>Syncing to your account… {progress.sent}/{progress.total}</Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progress.total ? Math.round((progress.sent / progress.total) * 100) : 0}%` }]} />
+              </View>
+            </View>
+          )}
+
           {error && <Text style={styles.errorText}>{error}</Text>}
           {msg && <View style={styles.resultBox}><Text style={styles.resultText}>{msg}</Text></View>}
         </ScrollView>
@@ -145,6 +160,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   outlineBtn: { borderWidth: 1, borderColor: c.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   outlineText: { color: c.primary, fontSize: 16, fontWeight: "700" },
   disabled: { opacity: 0.6 },
+  progressWrap: { marginTop: 16 },
+  progressText: { color: c.textMuted, fontSize: 13, marginBottom: 6 },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: c.track, overflow: "hidden" },
+  progressFill: { height: "100%", backgroundColor: c.primary, borderRadius: 4 },
   errorText: { color: c.danger, marginTop: 14, fontSize: 14 },
   resultBox: { marginTop: 16, padding: 14, backgroundColor: c.successSoft, borderRadius: 8 },
   resultText: { color: c.successText, fontSize: 15, fontWeight: "600" },
