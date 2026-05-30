@@ -13,6 +13,7 @@ export interface Colors {
   surfaceAlt: string;  // detail bar / subtle raised surface
   surface2: string;    // round buttons, chips
   card: string;        // modal/card background
+  inputBg: string;     // text-input background (distinct from screen bg in dark)
   cardBorder: string;  // hairline card/chart borders
   border: string;      // input / segment borders
   borderFaint: string; // detail separators
@@ -45,6 +46,7 @@ export const LIGHT: Colors = {
   surfaceAlt: "#fafafa",
   surface2: "#f1f3f4",
   card: "#ffffff",
+  inputBg: "#ffffff",
   cardBorder: "#eceff1",
   border: "#dadce0",
   borderFaint: "#e0e0e0",
@@ -77,6 +79,7 @@ export const DARK: Colors = {
   surfaceAlt: "#1a1a1a",
   surface2: "#2a2a2a",
   card: "#1e1e1e",
+  inputBg: "#2b2b2b",
   cardBorder: "#2c2c2c",
   border: "#3a3a3a",
   borderFaint: "#2e2e2e",

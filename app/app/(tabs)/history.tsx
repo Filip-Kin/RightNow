@@ -553,7 +553,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   noteCard: { backgroundColor: c.card, borderRadius: 14, padding: 20 },
   noteTitle: { fontSize: 18, fontWeight: "700", color: c.text },
   noteHint: { fontSize: 13, color: c.textMuted, marginTop: 4, marginBottom: 12 },
-  noteInput: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15, color: c.text, minHeight: 90, textAlignVertical: "top" },
+  noteInput: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15, color: c.text, backgroundColor: c.inputBg, minHeight: 90, textAlignVertical: "top" },
   noteActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 16 },
   noteCancel: { paddingVertical: 10, paddingHorizontal: 16 },
   noteCancelText: { color: c.textMuted, fontSize: 16, fontWeight: "600" },

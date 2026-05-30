@@ -1,4 +1,5 @@
-// Manage the optional email + password backup for the (otherwise anonymous) account.
+// Manage the email + optional password backup for the account (email is set at signup;
+// the password is the optional memorable fallback alongside QR + recovery code).
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -42,8 +43,7 @@ export default function AccountScreen() {
       <SafeAreaView style={styles.container} edges={["bottom"]}>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={styles.hint}>
-            Your account is anonymous - the recovery code is your real credential. Optionally add an
-            email + password as a memorable backup way to sign in if you ever lose the code.
+            Set an email + password as a memorable way to sign in, alongside QR and your recovery code.
           </Text>
 
           <View style={styles.statusBox}>
@@ -95,7 +95,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   statusLabel: { color: c.textMuted, fontSize: 12, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5 },
   statusValue: { color: c.text, fontSize: 16, fontWeight: "700", marginTop: 4 },
   label: { fontSize: 16, fontWeight: "bold", marginBottom: 8, color: c.textBody },
-  input: { height: 48, borderColor: c.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.card, marginBottom: 14 },
+  input: { height: 48, borderColor: c.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.inputBg, marginBottom: 14 },
   button: { height: 50, backgroundColor: c.primary, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   disabled: { opacity: 0.6 },
   buttonText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },

@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, StyleSheet, Button, View, TouchableOpacity } from "react-native";
+import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -48,7 +48,8 @@ export default function Settings() {
 
   return (
     <ScreenContainer>
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+    <ScrollView contentContainerStyle={styles.scroll}>
       <Text style={styles.heading}>Settings</Text>
 
       <View style={styles.syncBar}>
@@ -132,13 +133,15 @@ export default function Settings() {
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
         <Button title={"Log Out"} color={c.danger} onPress={() => { logout(); }} />
       </View>
+    </ScrollView>
     </SafeAreaView>
     </ScreenContainer>
   );
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: c.bg },
+  container: { flex: 1, backgroundColor: c.bg },
+  scroll: { padding: 16, paddingBottom: 40 },
   heading: { fontSize: 28, fontWeight: "800", marginBottom: 16, color: c.text },
   syncBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: c.surface, borderRadius: 10, padding: 12 },
   syncDot: { width: 14, alignItems: "center" },
@@ -160,6 +163,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   navItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.cardBorder },
   navText: { flex: 1, fontSize: 16, color: c.text },
   spacer: { height: 28 },
-  account: { marginTop: "auto", paddingTop: 24 },
+  account: { marginTop: 28, paddingTop: 24, borderTopWidth: 1, borderTopColor: c.cardBorder },
   accountText: { fontSize: 14, color: c.textMuted, marginBottom: 8 },
 });

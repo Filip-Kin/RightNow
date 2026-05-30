@@ -85,19 +85,31 @@ export async function restoreSession(): Promise<void> {
     }
 }
 
-/** Create an anonymous account (recovery code only). Returns the code to show once. */
-export async function createAnonymousAccount(): Promise<{ recoveryCode: string }> {
+/** Create an account: email required, password optional, recovery code always set.
+ *  Returns the recovery code to show once. */
+export async function register(email: string, password?: string): Promise<{ recoveryCode: string }> {
     const dekBytes = generateDEK();
     const { code, display } = generateRecoveryCode();
+    const e = email.trim();
     const rc = deriveFromRecoveryCode(code);
     const wrc = wrapDEK(rc.kek, dekBytes);
 
-    const res = await trpc.auth.registerAnonymous.mutate({
+    const extra: { authTokenPw?: string; wrappedDekPw?: string; wrappedDekPwNonce?: string } = {};
+    if (password) {
+        const pw = deriveFromSecret(password, e);
+        const wpw = wrapDEK(pw.kek, dekBytes);
+        extra.authTokenPw = pw.authToken;
+        extra.wrappedDekPw = wpw.ciphertext;
+        extra.wrappedDekPwNonce = wpw.nonce;
+    }
+    const res = await trpc.auth.register.mutate({
+        email: e,
         authTokenRc: rc.authToken,
         wrappedDekRc: wrc.ciphertext, wrappedDekRcNonce: wrc.nonce,
+        ...extra,
     });
     pendingRecoveryCode = display;
-    await persistSession(res.token, dekBytes, "", res.userId);
+    await persistSession(res.token, dekBytes, e, res.userId);
     return { recoveryCode: display };
 }
 

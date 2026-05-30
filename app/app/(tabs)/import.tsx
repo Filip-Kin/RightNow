@@ -264,7 +264,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   segmentItemActive: { backgroundColor: c.primary },
   segmentText: { fontSize: 15, fontWeight: "600", color: c.textBody },
   segmentTextActive: { color: c.onPrimary },
-  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text, backgroundColor: c.inputBg },
   primaryBtn: { flexDirection: "row", gap: 8, backgroundColor: c.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", justifyContent: "center", marginTop: 20 },
   primaryText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
   errorText: { color: c.danger, marginTop: 14, fontSize: 14 },

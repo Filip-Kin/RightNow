@@ -29,27 +29,40 @@ function recoveryLookup(authTokenRc: string): string {
 }
 
 export const authRouter = router({
-    // Create an anonymous account from a recovery code only. Email + password are an
-    // optional backup the client can add afterward via addBackup.
-    registerAnonymous: publicProcedure
+    // Create an account: email is required, a recovery code is always set, and a
+    // password is optional (the email+password backup). The DEK is wrapped under the
+    // recovery key (always) and the password key (if a password was set).
+    register: publicProcedure
         .input(z.object({
+            email: z.string().email().max(255),
             authTokenRc: z.string().min(16).max(512),
             wrappedDekRc: z.string().max(2048),
             wrappedDekRcNonce: z.string().max(512),
+            authTokenPw: z.string().min(16).max(512).optional(),
+            wrappedDekPw: z.string().max(2048).optional(),
+            wrappedDekPwNonce: z.string().max(512).optional(),
         }))
         .mutation(async ({ input }) => {
+            const emailTaken = (await db.select({ id: usersTable.id }).from(usersTable)
+                .where(eq(usersTable.email, input.email)))[0];
+            if (emailTaken) throw new TRPCError({ code: 'CONFLICT', message: 'That email is already registered' });
+
             const lookup = recoveryLookup(input.authTokenRc);
-            const existing = (await db.select({ id: usersTable.id }).from(usersTable)
+            const rcExisting = (await db.select({ id: usersTable.id }).from(usersTable)
                 .where(eq(usersTable.recovery_lookup, lookup)))[0];
-            if (existing) {
-                throw new TRPCError({ code: 'CONFLICT', message: 'Recovery code collision, please try again' });
-            }
-            const [user] = await db.insert(usersTable).values({ recovery_lookup: lookup })
-                .returning({ id: usersTable.id });
+            if (rcExisting) throw new TRPCError({ code: 'CONFLICT', message: 'Recovery code collision, please try again' });
+
+            const [user] = await db.insert(usersTable).values({
+                email: input.email,
+                recovery_lookup: lookup,
+                auth_hash: input.authTokenPw ? await Bun.password.hash(input.authTokenPw) : null,
+            }).returning({ id: usersTable.id });
             await db.insert(userKeysTable).values({
                 user_id: user.id,
                 wrapped_dek_rc: input.wrappedDekRc,
                 wrapped_dek_rc_nonce: input.wrappedDekRcNonce,
+                wrapped_dek_pw: input.wrappedDekPw ?? null,
+                wrapped_dek_pw_nonce: input.wrappedDekPwNonce ?? null,
             });
             const token = await mintToken(user.id, 'session', '');
             return { token, userId: user.id };

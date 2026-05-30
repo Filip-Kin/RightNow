@@ -222,7 +222,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   modalCard: { backgroundColor: c.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: "90%" },
   modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: c.text },
   fieldLabel: { fontSize: 13, fontWeight: "700", color: c.textBody, marginTop: 14, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text, backgroundColor: c.inputBg },
   inputError: { borderColor: c.danger },
   errorText: { color: c.danger, fontSize: 12, marginTop: 4 },
   choiceWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

@@ -1,13 +1,11 @@
 import { Redirect, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addEmailPasswordBackup, consumeRecoveryCode } from "@/lib/auth";
+import { consumeRecoveryCode } from "@/lib/auth";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 const hexOnly = (s: string) => s.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
-
-type Step = "show" | "verify" | "backup";
 
 export default function RecoveryCodeScreen() {
   const router = useRouter();
@@ -16,12 +14,9 @@ export default function RecoveryCodeScreen() {
   // Consume once on first render. On a web reload (nothing stashed) bounce home.
   const code = useRef(consumeRecoveryCode()).current;
 
-  const [step, setStep] = useState<Step>("show");
+  const [step, setStep] = useState<"show" | "verify">("show");
   const [confirm, setConfirm] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   if (!code) return <Redirect href="/" />;
 
@@ -33,33 +28,18 @@ export default function RecoveryCodeScreen() {
       setError("That doesn't match the start of your code. Check what you saved.");
       return;
     }
-    setStep("backup");
-  }
-
-  async function onAddBackup() {
-    setError(null);
-    if (password.length < 8) return setError("Use at least 8 characters.");
-    setBusy(true);
-    try {
-      await addEmailPasswordBackup(email, password);
-      router.replace("/");
-    } catch (e: any) {
-      setError(e?.message ?? "Could not save your backup.");
-    } finally {
-      setBusy(false);
-    }
+    router.replace("/");
   }
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        {step === "show" && (
+        {step === "show" ? (
           <>
             <Text style={styles.title}>Save your recovery code</Text>
             <Text style={styles.body}>
-              This is your account. It's the only way back in if you don't have another signed-in
-              device. Your data is end-to-end encrypted, so we can't reset it for you - lose this code
-              (and any optional backup) and your data is gone for good.
+              This is a last-resort way back into your account if you lose your other devices and your
+              password. Your data is end-to-end encrypted, so we can't recover it for you.
             </Text>
             <Text style={styles.hint}>Write it down or store it in a password manager.</Text>
             <View style={styles.codeBox}>
@@ -69,9 +49,7 @@ export default function RecoveryCodeScreen() {
               <Text style={styles.buttonText}>I've saved it</Text>
             </TouchableOpacity>
           </>
-        )}
-
-        {step === "verify" && (
+        ) : (
           <>
             <Text style={styles.title}>Confirm you saved it</Text>
             <Text style={styles.body}>Type the first 4 characters of your recovery code.</Text>
@@ -86,55 +64,18 @@ export default function RecoveryCodeScreen() {
               maxLength={5}
               placeholder="e.g. A1B2"
               placeholderTextColor={c.textFaint}
+              returnKeyType="go"
+              onSubmitEditing={onConfirm}
             />
             <TouchableOpacity
               style={[styles.button, hexOnly(confirm).length < 4 && styles.buttonDisabled]}
               disabled={hexOnly(confirm).length < 4}
               onPress={onConfirm}
             >
-              <Text style={styles.buttonText}>Confirm</Text>
+              <Text style={styles.buttonText}>Confirm &amp; continue</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.linkBtn} onPress={() => setStep("show")}>
               <Text style={styles.link}>Show my code again</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {step === "backup" && (
-          <>
-            <Text style={styles.title}>Add a backup (optional)</Text>
-            <Text style={styles.body}>
-              Add an email + password as a memorable way back in if you ever lose your recovery code.
-              You can also do this later in Settings.
-            </Text>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="you@example.com"
-              placeholderTextColor={c.textFaint}
-            />
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholder="Password (at least 8 characters)"
-              placeholderTextColor={c.textFaint}
-            />
-            <TouchableOpacity
-              style={[styles.button, (!email || password.length < 8 || busy) && styles.buttonDisabled]}
-              disabled={!email || password.length < 8 || busy}
-              onPress={onAddBackup}
-            >
-              {busy ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.buttonText}>Save backup &amp; continue</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.linkBtn} onPress={() => router.replace("/")} disabled={busy}>
-              <Text style={styles.link}>Skip for now</Text>
             </TouchableOpacity>
           </>
         )}
@@ -151,7 +92,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   hint: { fontSize: 14, color: c.textMuted, fontWeight: "600", marginBottom: 20 },
   codeBox: { backgroundColor: c.surface, borderRadius: 12, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: c.border },
   code: { fontFamily: "monospace", fontSize: 16, letterSpacing: 1, color: c.text, textAlign: "center", lineHeight: 26 },
-  input: { height: 48, borderColor: c.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.card, marginBottom: 14 },
+  input: { height: 48, borderColor: c.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.inputBg, marginBottom: 14 },
   button: { height: 50, backgroundColor: c.primary, borderRadius: 10, alignItems: "center", justifyContent: "center", marginTop: 4 },
   buttonDisabled: { backgroundColor: c.primaryDisabled },
   buttonText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },

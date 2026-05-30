@@ -34,6 +34,7 @@ export function Field({ label, ...props }: { label: string } & TextInputProps) {
             <TextInput
                 style={styles.input}
                 placeholderTextColor={c.textFaint}
+                selectionColor={c.primary}
                 autoCapitalize="none"
                 autoCorrect={false}
                 {...props}
@@ -82,7 +83,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     label: { fontSize: 13, fontWeight: "600", marginBottom: 6, color: c.textBody },
     input: {
         height: 48, borderColor: c.border, borderWidth: 1, borderRadius: 10,
-        paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.card,
+        paddingHorizontal: 14, fontSize: 16, color: c.text, backgroundColor: c.inputBg,
     },
     button: {
         height: 50, backgroundColor: c.primary, borderRadius: 10,

@@ -88,12 +88,13 @@ async function main() {
     const rc = splitAuth(stretchRecovery(recoveryCode));
     const wrapRc = aeadSeal(rc.kek, dek);
 
-    console.log('registerAnonymous');
-    const reg = await client().auth.registerAnonymous.mutate({
+    console.log('register (email + recovery code)');
+    const reg = await client().auth.register.mutate({
+        email,
         authTokenRc: rc.authToken,
         wrappedDekRc: wrapRc.ciphertext, wrappedDekRcNonce: wrapRc.nonce,
     });
-    check('registerAnonymous returns a session token', !!reg.token);
+    check('register returns a session token', !!reg.token);
 
     // --- push two encrypted cells ---
     console.log('push');

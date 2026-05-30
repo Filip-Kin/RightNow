@@ -11,11 +11,11 @@ import { useRouter } from "expo-router";
 import { Suspense, useEffect } from "react";
 import {
   Button,
-  SafeAreaView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -31,57 +31,43 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer>
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={["top"]}>
       <Suspense fallback={<></>}>
         <PermissionAlert />
       </Suspense>
 
-      <View className="p-4">
-        <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center", color: c.text }}>
-          RightNow
-        </Text>
-        {behindCount <= 0
-          ? (
-            <View
-              style={{
-                borderWidth: 1,
-                borderColor: c.borderFaint,
-                alignItems: "center",
-                justifyContent: "center",
-                width: "50%",
-                aspectRatio: 1,
-                backgroundColor: c.surface,
-                borderRadius: 9999,
-                margin: "auto",
-                marginTop: 32,
-              }}
-            >
-              <Text style={{ fontSize: 24, color: c.text }}>You're all caught up!</Text>
-            </View>
-          )
-          : (
-            <TouchableOpacity
-              style={{
-                borderWidth: 1,
-                borderColor: c.border,
-                alignItems: "center",
-                justifyContent: "center",
-                width: "50%",
-                aspectRatio: 1,
-                backgroundColor: c.card,
-                borderRadius: 9999,
-                margin: "auto",
-                marginTop: 32,
-              }}
-              onPress={() => {
-                router.push({ pathname: "/log" });
-              }}
-            >
-              <Text style={{ fontSize: 24, color: c.text }}>
-                Log {behindCount} {behindCount === 1 ? "entry" : "entries"}
-              </Text>
-            </TouchableOpacity>
-          )}
+      <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center", color: c.text, paddingVertical: 16 }}>
+        RightNow
+      </Text>
+
+      {/* Center the circle in the remaining space, both axes. */}
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
+        {behindCount <= 0 ? (
+          <View
+            style={{
+              borderWidth: 1, borderColor: c.borderFaint,
+              alignItems: "center", justifyContent: "center",
+              width: "62%", aspectRatio: 1, padding: 20,
+              backgroundColor: c.surface, borderRadius: 9999,
+            }}
+          >
+            <Text style={{ fontSize: 22, color: c.text, textAlign: "center" }}>You're all caught up!</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={{
+              borderWidth: 1, borderColor: c.border,
+              alignItems: "center", justifyContent: "center",
+              width: "62%", aspectRatio: 1, padding: 20,
+              backgroundColor: c.card, borderRadius: 9999,
+            }}
+            onPress={() => { router.push({ pathname: "/log" }); }}
+          >
+            <Text style={{ fontSize: 22, color: c.text, textAlign: "center" }}>
+              Log {behindCount} {behindCount === 1 ? "entry" : "entries"}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
     </ScreenContainer>
