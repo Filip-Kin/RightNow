@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { requestPermissionsAsync } from "expo-notifications";
 import { Alert, AppState, Platform } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
+import { setSyncStatusListener } from "./entries";
 
 const DEFAULT_REMINDER_HOUR = 21;
+const SYNC_WARN_ID = "right-now-sync-failed";
 
 // Without a handler, expo-notifications suppresses notifications while the app is
 // foregrounded - which is exactly when the "test" fires - so they never showed.
@@ -83,6 +85,36 @@ export async function scheduleTestNotification() {
     },
   });
 }
+
+// #region sync-failure warning
+// When the device can reach the server but keeps getting rejected (status "error",
+// e.g. an invalid session), warn the user with a notification that repeats daily
+// until a sync succeeds. Pure offline ("offline") stays quiet - it just retries.
+async function scheduleSyncFailureWarning() {
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return;
+  await ensureAndroidChannel();
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "RightNow isn't syncing",
+      body: "Your entries aren't backing up to your account. Open RightNow and sign in again.",
+      data: { kind: "sync" },
+      interruptionLevel: "active",
+    },
+    identifier: SYNC_WARN_ID, // same id replaces any existing schedule
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 24 * 60 * 60, repeats: true },
+  });
+}
+
+async function cancelSyncFailureWarning() {
+  await Notifications.cancelScheduledNotificationAsync(SYNC_WARN_ID).catch(() => {});
+}
+
+setSyncStatusListener((status) => {
+  if (status === "error") scheduleSyncFailureWarning().catch(() => {});
+  else if (status === "ok") cancelSyncFailureWarning().catch(() => {});
+});
+// #endregion
 
 function getPermissionStatus() {
   return Notifications.getPermissionsAsync().then((result) => {

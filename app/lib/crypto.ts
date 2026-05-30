@@ -49,6 +49,21 @@ export function deriveFromSecret(secret: string, email: string): { authToken: st
     };
 }
 
+// Anonymous accounts have no email, so the recovery code is stretched with a fixed
+// app salt instead. The code is already 256-bit random, so a per-account salt buys
+// nothing; the constant salt just domain-separates this derivation. The server
+// finds the account by SHA-256(authToken) (a queryable lookup key), never the code.
+const RECOVERY_SALT = sha256(utf8ToBytes("rightnow/recovery-code/v1"));
+
+/** Stretch a recovery code (no email) into the server-facing auth token + device KEK. */
+export function deriveFromRecoveryCode(code: string): { authToken: string; kek: Uint8Array } {
+    const stretched = argon2id(utf8ToBytes(code.normalize("NFKC")), RECOVERY_SALT, ARGON2);
+    return {
+        authToken: bytesToHex(stretched.subarray(0, 32)),
+        kek: stretched.subarray(32, 64),
+    };
+}
+
 export function generateDEK(): Uint8Array {
     return randomBytes(32);
 }

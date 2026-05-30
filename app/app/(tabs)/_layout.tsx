@@ -38,6 +38,7 @@ export default function TabLayout() {
       <Tabs.Screen name="log" options={{ href: null }} />
       <Tabs.Screen name="year" options={{ href: null, headerShown: true, title: "Year view" }} />
       <Tabs.Screen name="link" options={{ href: null, headerShown: true, title: "Link a device" }} />
+      <Tabs.Screen name="account" options={{ href: null, headerShown: true, title: "Backup login" }} />
       <Tabs.Screen name="activities" options={{ href: null, headerShown: true, title: "Activities" }} />
       <Tabs.Screen name="import" options={{ href: null, headerShown: true, title: "Import data" }} />
       <Tabs.Screen name="backup" options={{ href: null, headerShown: true, title: "Backup & restore" }} />

@@ -24,6 +24,11 @@ function stretch(secret: string, email: string): Buffer {
     const salt = createHash('sha256').update(email.trim().toLowerCase()).digest();
     return scryptSync(secret, salt, 64); // [0..32) auth, [32..64) KEK
 }
+/** Recovery codes have no email, so they stretch with a fixed app salt (matches lib/crypto). */
+function stretchRecovery(code: string): Buffer {
+    const salt = createHash('sha256').update('rightnow/recovery-code/v1').digest();
+    return scryptSync(code, salt, 64);
+}
 function splitAuth(stretched: Buffer) {
     return {
         authToken: stretched.subarray(0, 32).toString('hex'),
@@ -74,26 +79,21 @@ function check(name: string, cond: boolean) {
 async function main() {
     const email = `e2e+${randomBytes(4).toString('hex')}@example.com`;
     const password = 'correct horse battery staple';
-    const recoveryCode = randomBytes(32).toString('base64'); // ~256-bit, high entropy
+    const recoveryCode = randomBytes(32).toString('hex'); // 256-bit, high entropy
 
-    // --- signup: all crypto on client, server stores opaque blobs ---
+    // --- anonymous signup: recovery code only, server stores opaque blobs ---
     const dek = randomBytes(32);
     const { cellKey, dataKey } = dekKeys(dek);
 
-    const pw = splitAuth(stretch(password, email));
-    const rc = splitAuth(stretch(recoveryCode, email));
-    const wrapPw = aeadSeal(pw.kek, dek);
+    const rc = splitAuth(stretchRecovery(recoveryCode));
     const wrapRc = aeadSeal(rc.kek, dek);
 
-    console.log('register');
-    const reg = await client().auth.register.mutate({
-        email,
-        authTokenPw: pw.authToken,
+    console.log('registerAnonymous');
+    const reg = await client().auth.registerAnonymous.mutate({
         authTokenRc: rc.authToken,
-        wrappedDekPw: wrapPw.ciphertext, wrappedDekPwNonce: wrapPw.nonce,
         wrappedDekRc: wrapRc.ciphertext, wrappedDekRcNonce: wrapRc.nonce,
     });
-    check('register returns a session token', !!reg.token);
+    check('registerAnonymous returns a session token', !!reg.token);
 
     // --- push two encrypted cells ---
     console.log('push');
@@ -106,16 +106,16 @@ async function main() {
         records: [mk('2026-05-28', 9, 3, 4, t0), mk('2026-05-28', 10, 6, 5, t0)],
     });
 
-    // --- login on a "new device": only password + email, unwrap DEK from server blob ---
-    console.log('login (fresh device)');
-    const login = await client().auth.login.mutate({ email, authTokenPw: pw.authToken });
-    const loginKek = splitAuth(stretch(password, email)).kek;
-    const dekFromLogin = aeadOpen(loginKek, login.wrappedDekPw, login.wrappedDekPwNonce);
-    check('DEK unwrapped on fresh login equals original', dekFromLogin.equals(dek));
+    // --- sign in with the recovery code on a "new device": unwrap DEK from rc blob ---
+    console.log('signInWithCode (fresh device)');
+    const signin = await client().auth.signInWithCode.mutate({ authTokenRc: rc.authToken });
+    const dekFromRc = aeadOpen(rc.kek, signin.wrappedDekRc, signin.wrappedDekRcNonce);
+    check('DEK unwrapped via recovery code equals original', dekFromRc.equals(dek));
 
     // --- pull + decrypt with the recovered DEK ---
     console.log('pull');
-    const k2 = dekKeys(dekFromLogin);
+    const k2 = dekKeys(dekFromRc);
+    const login = signin; // alias: subsequent calls use this session token
     const pulled = await client(login.token).entries.pull.query({});
     check('pull returns both cells', pulled.records.length === 2);
     const decoded = pulled.records.map((r) => JSON.parse(aeadOpen(k2.dataKey, r.ciphertext, r.nonce).toString()));
@@ -136,25 +136,29 @@ async function main() {
     const since = await client(login.token).entries.pull.query({ since: afterNew.cursor });
     check('pull(since=cursor) returns nothing new', since.records.length === 0);
 
-    // --- recovery: forgot password, use recovery code, reset to a new password ---
-    console.log('recover + resetPassword');
-    const recovered = await client().auth.recover.mutate({ email, authTokenRc: rc.authToken });
-    const dekFromRc = aeadOpen(rc.kek, recovered.wrappedDekRc, recovered.wrappedDekRcNonce);
-    check('DEK unwrapped via recovery code equals original', dekFromRc.equals(dek));
-
-    const newPassword = 'a brand new passphrase';
-    const newPw = splitAuth(stretch(newPassword, email));
-    const newWrap = aeadSeal(newPw.kek, dekFromRc);
-    await client(recovered.recoveryToken).auth.resetPassword.mutate({
-        authTokenPw: newPw.authToken,
-        wrappedDekPw: newWrap.ciphertext, wrappedDekPwNonce: newWrap.nonce,
+    // --- add the optional email+password backup, then sign in with it on a fresh device ---
+    console.log('addBackup + email/password login');
+    const pw = splitAuth(stretch(password, email));
+    const wrapPw = aeadSeal(pw.kek, dek);
+    await client(reg.token).auth.addBackup.mutate({
+        email,
+        authTokenPw: pw.authToken,
+        wrappedDekPw: wrapPw.ciphertext, wrappedDekPwNonce: wrapPw.nonce,
     });
-    const oldLoginFails = await client().auth.login.mutate({ email, authTokenPw: pw.authToken })
+    const status = await client(reg.token).auth.backupStatus.query();
+    check('backupStatus reports the backup email', status.email === email);
+
+    const pwLogin = await client().auth.login.mutate({ email, authTokenPw: pw.authToken });
+    const dekFromPw = aeadOpen(pw.kek, pwLogin.wrappedDekPw, pwLogin.wrappedDekPwNonce);
+    check('DEK unwrapped via email+password equals original', dekFromPw.equals(dek));
+
+    const wrongLoginFails = await client().auth.login.mutate({ email, authTokenPw: 'deadbeef'.repeat(8) })
         .then(() => false).catch(() => true);
-    check('old password no longer works', oldLoginFails);
-    const relogin = await client().auth.login.mutate({ email, authTokenPw: newPw.authToken });
-    const dekAfterReset = aeadOpen(newPw.kek, relogin.wrappedDekPw, relogin.wrappedDekPwNonce);
-    check('new password unwraps the same DEK', dekAfterReset.equals(dek));
+    check('wrong password rejected', wrongLoginFails);
+
+    const wrongCodeFails = await client().auth.signInWithCode.mutate({ authTokenRc: 'deadbeef'.repeat(8) })
+        .then(() => false).catch(() => true);
+    check('wrong recovery code rejected', wrongCodeFails);
 
     // --- auth enforcement ---
     console.log('auth enforcement');

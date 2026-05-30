@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { trpc, setAuthToken } from "./trpc";
 import {
-    deriveFromSecret, generateDEK, generateRecoveryCode, normalizeRecoveryCode,
+    deriveFromSecret, deriveFromRecoveryCode, generateDEK, generateRecoveryCode, normalizeRecoveryCode,
     wrapDEK, unwrapDEK, dekToHex, dekFromHex,
     generateLinkKeypair, linkSharedKey, sealWithKey, openWithKey, randomChannelId,
     toHex, fromHex,
@@ -85,28 +85,31 @@ export async function restoreSession(): Promise<void> {
     }
 }
 
-/** Create an account. Returns the recovery code to show once (we can't recover it). */
-export async function register(email: string, password: string): Promise<{ recoveryCode: string }> {
+/** Create an anonymous account (recovery code only). Returns the code to show once. */
+export async function createAnonymousAccount(): Promise<{ recoveryCode: string }> {
     const dekBytes = generateDEK();
     const { code, display } = generateRecoveryCode();
-    const pw = deriveFromSecret(password, email);
-    const rc = deriveFromSecret(code, email);
-    const wpw = wrapDEK(pw.kek, dekBytes);
+    const rc = deriveFromRecoveryCode(code);
     const wrc = wrapDEK(rc.kek, dekBytes);
 
-    const res = await trpc.auth.register.mutate({
-        email,
-        authTokenPw: pw.authToken,
+    const res = await trpc.auth.registerAnonymous.mutate({
         authTokenRc: rc.authToken,
-        wrappedDekPw: wpw.ciphertext, wrappedDekPwNonce: wpw.nonce,
         wrappedDekRc: wrc.ciphertext, wrappedDekRcNonce: wrc.nonce,
     });
     pendingRecoveryCode = display;
-    await persistSession(res.token, dekBytes, email, res.userId);
+    await persistSession(res.token, dekBytes, "", res.userId);
     return { recoveryCode: display };
 }
 
-/** Sign in (works on a fresh device: unwraps the DEK from the server blob). */
+/** Sign in on any device with the recovery code (unwraps the DEK from the server). */
+export async function signInWithCode(recoveryInput: string): Promise<void> {
+    const rc = deriveFromRecoveryCode(normalizeRecoveryCode(recoveryInput));
+    const res = await trpc.auth.signInWithCode.mutate({ authTokenRc: rc.authToken });
+    const dekBytes = unwrapDEK(rc.kek, { ciphertext: res.wrappedDekRc, nonce: res.wrappedDekRcNonce });
+    await persistSession(res.token, dekBytes, "", res.userId);
+}
+
+/** Sign in with the optional email+password backup (unwraps the DEK from the server). */
 export async function login(email: string, password: string): Promise<void> {
     const pw = deriveFromSecret(password, email);
     const res = await trpc.auth.login.mutate({ email, authTokenPw: pw.authToken });
@@ -114,21 +117,19 @@ export async function login(email: string, password: string): Promise<void> {
     await persistSession(res.token, dekBytes, email, res.userId);
 }
 
-/** Forgot password: prove ownership with the recovery code, set a new password. */
-export async function recoverAndReset(email: string, recoveryInput: string, newPassword: string): Promise<void> {
-    const rc = deriveFromSecret(normalizeRecoveryCode(recoveryInput), email);
-    const res = await trpc.auth.recover.mutate({ email, authTokenRc: rc.authToken });
-    const dekBytes = unwrapDEK(rc.kek, { ciphertext: res.wrappedDekRc, nonce: res.wrappedDekRcNonce });
-
-    const newPw = deriveFromSecret(newPassword, email);
-    const nwpw = wrapDEK(newPw.kek, dekBytes);
-    setAuthToken(res.recoveryToken); // recovery token only authorizes resetPassword
-    await trpc.auth.resetPassword.mutate({
-        authTokenPw: newPw.authToken,
-        wrappedDekPw: nwpw.ciphertext, wrappedDekPwNonce: nwpw.nonce,
+/** Add (or replace) the optional email+password backup on the signed-in account. */
+export async function addEmailPasswordBackup(email: string, password: string): Promise<void> {
+    const d = getDEK();
+    if (!d) throw new Error("Sign in first");
+    const pw = deriveFromSecret(password, email.trim());
+    const wpw = wrapDEK(pw.kek, d);
+    await trpc.auth.addBackup.mutate({
+        email: email.trim(),
+        authTokenPw: pw.authToken,
+        wrappedDekPw: wpw.ciphertext, wrappedDekPwNonce: wpw.nonce,
     });
-    // The recovery token was consumed; get a clean session with the new password.
-    await login(email, newPassword);
+    setState({ email: email.trim() });
+    await secureSet(K.email, email.trim());
 }
 
 export async function logout(): Promise<void> {

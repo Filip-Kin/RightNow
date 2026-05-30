@@ -333,10 +333,56 @@ export async function push(onProgress?: (sent: number, total: number) => void): 
     }
 }
 
-/** Push local changes, pull remote changes (LWW merge), advance the caught-up anchor. */
+// #region sync status (surfaced in Settings + drives the sync-failure notification)
+export type SyncStatus = "idle" | "syncing" | "ok" | "offline" | "error";
+let syncStatus: SyncStatus = "idle";
+let lastSyncAt = 0;
+const syncListeners = new Set<() => void>();
+let onSyncStatusChange: ((s: SyncStatus) => void) | null = null;
+
+function setSyncStatus(s: SyncStatus) {
+    syncStatus = s;
+    if (s === "ok") lastSyncAt = Date.now();
+    for (const l of syncListeners) l();
+    onSyncStatusChange?.(s);
+}
+
+export function getSyncStatus(): { status: SyncStatus; lastSyncAt: number } {
+    return { status: syncStatus, lastSyncAt };
+}
+export function subscribeSyncStatus(fn: () => void): () => void {
+    syncListeners.add(fn);
+    return () => void syncListeners.delete(fn);
+}
+/** Reactive sync status for the Settings indicator. */
+export function useSyncStatus(): { status: SyncStatus; lastSyncAt: number } {
+    const [v, setV] = useState(getSyncStatus);
+    useEffect(() => subscribeSyncStatus(() => setV(getSyncStatus())), []);
+    return v;
+}
+/** notification.ts registers here (callback avoids a circular import). */
+export function setSyncStatusListener(fn: (s: SyncStatus) => void) {
+    onSyncStatusChange = fn;
+}
+
+// "error" = the server is reachable but rejecting us (e.g. invalid session) - a real
+// problem to surface. "offline" = no connectivity - stay quiet, it'll retry.
+function classifySyncError(e: unknown): SyncStatus {
+    if (typeof navigator !== "undefined" && (navigator as { onLine?: boolean }).onLine === false) return "offline";
+    const httpStatus = (e as { data?: { httpStatus?: number } })?.data?.httpStatus;
+    if (httpStatus === 401 || httpStatus === 403) return "error";
+    const msg = String((e as { message?: string })?.message ?? "");
+    if (/fetch|network|failed to fetch|timeout|econn/i.test(msg)) return "offline";
+    return "error";
+}
+// #endregion
+
+/** Push local changes, pull remote changes (LWW merge). Never throws; updates sync status. */
 export async function sync(): Promise<void> {
     const dek = getDEK();
     if (!dek) return;
+    setSyncStatus("syncing");
+    try {
     await loadStore();
     await push();
 
@@ -374,4 +420,9 @@ export async function sync(): Promise<void> {
     cursor = res.cursor;
     if (changed) emit();
     await persist();
+    setSyncStatus("ok");
+    } catch (e) {
+        // Surface the failure via status; callers .catch() this no-op throw anyway.
+        setSyncStatus(classifySyncError(e));
+    }
 }

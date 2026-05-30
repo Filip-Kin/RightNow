@@ -7,7 +7,18 @@ import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
 import { logout, useAuth } from "@/lib/auth";
+import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
+
+function syncText(s: SyncStatus, lastSyncAt: number): string {
+  switch (s) {
+    case "syncing": return "Syncing…";
+    case "ok": return lastSyncAt ? `Synced at ${new Date(lastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Synced";
+    case "offline": return "Offline — will retry when you're back online";
+    case "error": return "Not syncing — your session may be invalid. Sign in again.";
+    default: return "Not synced yet";
+  }
+}
 
 const THEME_OPTIONS: { key: ThemePref; label: string }[] = [
   { key: "system", label: "System" },
@@ -26,6 +37,7 @@ export default function Settings() {
   const styles = useThemedStyles(makeStyles);
   const config = useConfig();
   const { email } = useAuth();
+  const syncState = useSyncStatus();
   const router = useRouter();
 
   function setReminderHour(next: number) {
@@ -38,6 +50,20 @@ export default function Settings() {
     <ScreenContainer>
     <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>Settings</Text>
+
+      <View style={styles.syncBar}>
+        <View style={styles.syncDot}>
+          <View style={[styles.dot, { backgroundColor: syncState.status === "ok" ? c.successText : syncState.status === "error" ? c.danger : c.textFaint }]} />
+        </View>
+        <Text style={styles.syncText} numberOfLines={2}>{syncText(syncState.status, syncState.lastSyncAt)}</Text>
+        <TouchableOpacity
+          style={[styles.syncBtn, syncState.status === "syncing" && styles.disabled]}
+          disabled={syncState.status === "syncing"}
+          onPress={() => { sync(); }}
+        >
+          <Text style={styles.syncBtnText}>Sync now</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.label}>Appearance</Text>
       <View style={styles.segment}>
@@ -92,6 +118,11 @@ export default function Settings() {
         <Text style={styles.navText}>Link a device</Text>
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/account")}>
+        <Icon name="lock" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Email &amp; password backup</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
 
       <View style={styles.spacer} />
       <Button title={"Send Test Notification"} onPress={() => { scheduleTestNotification(); }} />
@@ -109,6 +140,13 @@ export default function Settings() {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: c.bg },
   heading: { fontSize: 28, fontWeight: "800", marginBottom: 16, color: c.text },
+  syncBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: c.surface, borderRadius: 10, padding: 12 },
+  syncDot: { width: 14, alignItems: "center" },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  syncText: { flex: 1, fontSize: 13, color: c.textBody, lineHeight: 17 },
+  syncBtn: { borderWidth: 1, borderColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  syncBtnText: { color: c.primary, fontWeight: "700", fontSize: 13 },
+  disabled: { opacity: 0.5 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" },
   segItem: { paddingVertical: 8, paddingHorizontal: 18, backgroundColor: c.card },
   segItemActive: { backgroundColor: c.primary },

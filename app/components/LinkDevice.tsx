@@ -3,7 +3,7 @@
 // startScanLink). Defaults to "show" on web and "scan" on native, matching the
 // natural "phone scans, web displays" flow, but either is available on both.
 import React, { useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { QrScanner } from "@/components/QrScanner";
 import { startScanLink, startShowLink, type ShowLink } from "@/lib/auth";
@@ -19,6 +19,15 @@ export function LinkDevice() {
   const [status, setStatus] = useState("");
   const [done, setDone] = useState<Done | null>(null);
   const scanLockRef = useRef(false);
+  const checkScale = useRef(new Animated.Value(0)).current;
+
+  // Spring the green checkmark in when the link completes (the QR is gone by then,
+  // so it reads as the code turning into a check in the same spot).
+  useEffect(() => {
+    if (!done) return;
+    checkScale.setValue(0);
+    Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 90, useNativeDriver: Platform.OS !== "web" }).start();
+  }, [done]);
 
   // Show mode: open a channel and poll until the other device acts.
   useEffect(() => {
@@ -62,6 +71,9 @@ export function LinkDevice() {
   if (done) {
     return (
       <View style={styles.doneWrap}>
+        <Animated.View style={[styles.checkCircle, { transform: [{ scale: checkScale }] }]}>
+          <Text style={styles.checkMark}>✓</Text>
+        </Animated.View>
         <Text style={[styles.doneTitle, { color: c.text }]}>
           {done === "delivered" ? "Device linked" : "Signed in!"}
         </Text>
@@ -120,7 +132,9 @@ const styles = StyleSheet.create({
   qrBox: { backgroundColor: "#fff", padding: 16, borderRadius: 12 },
   scanBox: { height: 300, borderRadius: 12, borderWidth: 1, overflow: "hidden" },
   status: { textAlign: "center", fontSize: 14, lineHeight: 20 },
-  doneWrap: { padding: 32, alignItems: "center", gap: 8 },
+  doneWrap: { padding: 32, alignItems: "center", gap: 12 },
+  checkCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: "#34a853", alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  checkMark: { color: "#fff", fontSize: 56, fontWeight: "900", lineHeight: 60 },
   doneTitle: { fontSize: 22, fontWeight: "800" },
   doneBody: { fontSize: 14, textAlign: "center", lineHeight: 20 },
 });
