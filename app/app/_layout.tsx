@@ -4,8 +4,10 @@ import "../global.css";
 import { useEffect } from "react";
 import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
+  const c = useTheme();
   useNotificationResponseHandler();
   useEffect(() => {
     restoreSession();
@@ -14,7 +16,7 @@ export default function RootLayout() {
   // Web width is capped per-screen (see components/ScreenContainer) rather than by
   // wrapping the navigator here, which would hide the bottom tab bar.
   return (
-    <Stack>
+    <Stack screenOptions={{ contentStyle: { backgroundColor: c.bg } }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="welcome" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />

@@ -65,7 +65,7 @@ export interface LinePoint {
  */
 export function LineChart({
   points, min, max, width, height = 180, color = "#1a73e8", fill = "rgba(26,115,232,0.12)",
-  yLabel = (v: number) => v.toFixed(1),
+  grid = "#eceff1", axis = "#9aa0a6", yLabel = (v: number) => v.toFixed(1),
 }: {
   points: LinePoint[];
   min: number;
@@ -74,6 +74,8 @@ export function LineChart({
   height?: number;
   color?: string;
   fill?: string;
+  grid?: string;
+  axis?: string;
   yLabel?: (v: number) => string;
 }) {
   const padL = 28, padR = 8, padT = 8, padB = 8;
@@ -88,14 +90,14 @@ export function LineChart({
   const area = n > 0
     ? `${line} L${x(n - 1).toFixed(1)},${(padT + plotH).toFixed(1)} L${x(0).toFixed(1)},${(padT + plotH).toFixed(1)} Z`
     : "";
-  const grid = [max, (max + min) / 2, min];
+  const gridLines = [max, (max + min) / 2, min];
 
   return (
     <Svg width={width} height={height}>
-      {grid.map((g, i) => (
+      {gridLines.map((g, i) => (
         <G key={i}>
-          <Line x1={padL} y1={y(g)} x2={width - padR} y2={y(g)} stroke="#eceff1" strokeWidth={1} />
-          <SvgText x={0} y={y(g) + 3} fontSize={9} fill="#9aa0a6">{yLabel(g)}</SvgText>
+          <Line x1={padL} y1={y(g)} x2={width - padR} y2={y(g)} stroke={grid} strokeWidth={1} />
+          <SvgText x={0} y={y(g) + 3} fontSize={9} fill={axis}>{yLabel(g)}</SvgText>
         </G>
       ))}
       {n > 0 && <Path d={area} fill={fill} stroke="none" />}
@@ -107,11 +109,11 @@ export function LineChart({
 
 // #region bar
 /** A single horizontal proportional bar (used for avg-mood-per-activity rows). */
-export function HBar({ fraction, color, width, height = 10 }: { fraction: number; color: string; width: number; height?: number }) {
+export function HBar({ fraction, color, width, height = 10, track = "#eceff1" }: { fraction: number; color: string; width: number; height?: number; track?: string }) {
   const w = Math.max(0, Math.min(1, fraction)) * width;
   return (
     <Svg width={width} height={height}>
-      <Rect x={0} y={0} width={width} height={height} rx={height / 2} fill="#eceff1" />
+      <Rect x={0} y={0} width={width} height={height} rx={height / 2} fill={track} />
       {w > 0 && <Rect x={0} y={0} width={w} height={height} rx={height / 2} fill={color} />}
     </Svg>
   );

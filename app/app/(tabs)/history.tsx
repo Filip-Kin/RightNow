@@ -13,6 +13,7 @@ import {
   activityName, feelingColors, feelingIcons, feelings, getActivity, getContrastingTextColor,
   lightenColor, useActivities, type ActivityDef,
 } from "@/lib/activities";
+import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 // A field choice in the cell editor: a value, null (clear it), or "keep" (leave
 // each cell's current value untouched - the default for bulk edits).
@@ -20,7 +21,6 @@ type FieldChoice = number | null | "keep";
 
 const RANGES = [7, 30, 90, 365] as const;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const EMPTY = "#f0f0f0";
 type ColorMode = "activity" | "feeling";
 
 function dayKey(d: Date): string {
@@ -35,6 +35,8 @@ interface DayRow {
 }
 
 export default function HistoryScreen() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const entries = useEntries();
   const notes = useNotes();
@@ -164,9 +166,9 @@ export default function HistoryScreen() {
   }, [entries, rows]);
 
   function cellColor(e: LocalEntry | undefined): string {
-    if (!e) return EMPTY;
-    if (mode === "feeling") return e.feeling != null ? feelingColors[e.feeling] : EMPTY;
-    return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : EMPTY;
+    if (!e) return c.empty;
+    if (mode === "feeling") return e.feeling != null ? feelingColors[e.feeling] : c.empty;
+    return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : c.empty;
   }
 
   return (
@@ -287,6 +289,7 @@ export default function HistoryScreen() {
 }
 
 function NoteEditor({ date, initial, onClose }: { date: string; initial: string; onClose: () => void }) {
+  const styles = useThemedStyles(makeStyles);
   const [text, setText] = useState(initial);
   const [y, mo, d] = date.split("-").map(Number);
   const label = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -323,6 +326,7 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
 }
 
 function Summary({ value, label }: { value: string; label: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.summaryItem}>
       <Text style={styles.summaryValue} numberOfLines={1}>{value}</Text>
@@ -332,6 +336,7 @@ function Summary({ value, label }: { value: string; label: string }) {
 }
 
 function DetailBar({ selected, note }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string }) {
+  const styles = useThemedStyles(makeStyles);
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -371,6 +376,8 @@ function CellEditor({
   onApply: (activity: FieldChoice, feeling: FieldChoice) => void;
   onClose: () => void;
 }) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [act, setAct] = useState<FieldChoice>(bulk ? "keep" : initialActivity);
   const [feel, setFeel] = useState<FieldChoice>(bulk ? "keep" : initialFeeling);
 
@@ -427,7 +434,7 @@ function CellEditor({
               </TouchableOpacity>
             )}
             {feelings.map((f, i) => {
-              const color = feel === i ? "#007bff" : "#000000";
+              const color = feel === i ? c.primary : c.text;
               return (
                 <TouchableOpacity key={f} style={styles.feelingItem} onPress={() => pickFeeling(i)}>
                   <Text style={{ textAlign: "center", color, marginBottom: 2, fontWeight: "500", fontSize: 11 }}>{f}</Text>
@@ -455,6 +462,7 @@ function CellEditor({
 }
 
 function Legend({ mode }: { mode: ColorMode }) {
+  const styles = useThemedStyles(makeStyles);
   const activities = useActivities();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.legend} contentContainerStyle={{ gap: 12, paddingHorizontal: 12 }}>
@@ -475,85 +483,85 @@ function Legend({ mode }: { mode: ColorMode }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  heading: { fontSize: 28, fontWeight: "800", color: "#111", paddingHorizontal: 16, paddingTop: 4 },
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
+  heading: { fontSize: 28, fontWeight: "800", color: c.text, paddingHorizontal: 16, paddingTop: 4 },
   summaryRow: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
-  summaryItem: { flex: 1, backgroundColor: "#f8f9fa", borderRadius: 10, padding: 12 },
-  summaryValue: { fontSize: 18, fontWeight: "700", color: "#111" },
-  summaryLabel: { fontSize: 11, color: "#5f6368", marginTop: 2 },
+  summaryItem: { flex: 1, backgroundColor: c.surface, borderRadius: 10, padding: 12 },
+  summaryValue: { fontSize: 18, fontWeight: "700", color: c.text },
+  summaryLabel: { fontSize: 11, color: c.textMuted, marginTop: 2 },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10 },
   controlsRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  segment: { flexDirection: "row", borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, overflow: "hidden" },
-  segItem: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: "#fff" },
-  segItemActive: { backgroundColor: "#1a73e8" },
-  segText: { fontSize: 13, fontWeight: "600", color: "#3c4043" },
-  segTextActive: { color: "#fff" },
-  modeBtn: { borderWidth: 1, borderColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
-  modeBtnActive: { backgroundColor: "#1a73e8" },
-  modeText: { color: "#1a73e8", fontWeight: "600", fontSize: 13 },
-  modeTextActive: { color: "#fff" },
+  segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden" },
+  segItem: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: c.card },
+  segItemActive: { backgroundColor: c.primary },
+  segText: { fontSize: 13, fontWeight: "600", color: c.textBody },
+  segTextActive: { color: c.onPrimary },
+  modeBtn: { borderWidth: 1, borderColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
+  modeBtnActive: { backgroundColor: c.primary },
+  modeText: { color: c.primary, fontWeight: "600", fontSize: 13 },
+  modeTextActive: { color: c.onPrimary },
 
   headerRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "flex-end", marginBottom: 2 },
   headerCell: { flex: 1, alignItems: "center" },
-  headerText: { fontSize: 8, color: "#9aa0a6" },
+  headerText: { fontSize: 8, color: c.textFaint },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
   dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
-  dayLabelNote: { backgroundColor: "#ffe082", borderWidth: 1, borderColor: "#f5b800" }, // a day with a note gets a highlighted date box
-  noteDot: { fontSize: 7, color: "#b06000" },
-  dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
-  dayWeekday: { fontSize: 9, color: "#9aa0a6" },
+  dayLabelNote: { backgroundColor: c.noteHighlight, borderWidth: 1, borderColor: c.noteBorder }, // a day with a note gets a highlighted date box
+  noteDot: { fontSize: 7, color: c.noteDot },
+  dayLabel: { fontSize: 11, fontWeight: "600", color: c.textBody },
+  dayWeekday: { fontSize: 9, color: c.textFaint },
   // Ring via boxShadow rather than a border so selecting a cell doesn't resize it
   // (a border would shrink the box and shift the row's layout).
   cell: { flex: 1, height: 16, marginHorizontal: 0.5, borderRadius: 2 },
-  cellSelected: { boxShadow: "0 0 0 2px #111" },
-  cellInSel: { boxShadow: "0 0 0 2px #1a73e8" },
+  cellSelected: { boxShadow: `0 0 0 2px ${c.text}` },
+  cellInSel: { boxShadow: `0 0 0 2px ${c.primary}` },
 
-  detail: { flexDirection: "row", alignItems: "center", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
-  detailTitle: { fontSize: 14, fontWeight: "700", color: "#111" },
-  detailBody: { fontSize: 14, color: "#3c4043", marginTop: 2 },
-  detailEmpty: { fontSize: 14, color: "#9aa0a6", marginTop: 2, fontStyle: "italic" },
-  detailNote: { fontSize: 13, color: "#3c4043", marginTop: 4 },
-  detailHint: { fontSize: 12, color: "#9aa0a6", fontStyle: "italic" },
+  detail: { flexDirection: "row", alignItems: "center", padding: 14, borderTopWidth: 1, borderTopColor: c.borderFaint, backgroundColor: c.surfaceAlt },
+  detailTitle: { fontSize: 14, fontWeight: "700", color: c.text },
+  detailBody: { fontSize: 14, color: c.textBody, marginTop: 2 },
+  detailEmpty: { fontSize: 14, color: c.textFaint, marginTop: 2, fontStyle: "italic" },
+  detailNote: { fontSize: 13, color: c.textBody, marginTop: 4 },
+  detailHint: { fontSize: 12, color: c.textFaint, fontStyle: "italic" },
 
-  selBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
-  selBarText: { fontSize: 14, fontWeight: "600", color: "#3c4043", flex: 1 },
+  selBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderTopWidth: 1, borderTopColor: c.borderFaint, backgroundColor: c.surfaceAlt },
+  selBarText: { fontSize: 14, fontWeight: "600", color: c.textBody, flex: 1 },
   selBarActions: { flexDirection: "row", gap: 10 },
   selClear: { paddingVertical: 8, paddingHorizontal: 12 },
-  selClearText: { color: "#5f6368", fontWeight: "600", fontSize: 14 },
-  selEdit: { backgroundColor: "#1a73e8", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
-  selEditText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  selClearText: { color: c.textMuted, fontWeight: "600", fontSize: 14 },
+  selEdit: { backgroundColor: c.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
+  selEditText: { color: c.onPrimary, fontWeight: "700", fontSize: 14 },
 
   // Cell editor, mirroring the log submission screen.
-  editBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 20 },
-  editCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20, maxHeight: "90%" },
-  editTitle: { fontSize: 18, fontWeight: "700", color: "#111", textAlign: "center", marginBottom: 12 },
-  editLabel: { fontSize: 18, fontWeight: "bold", color: "#111", marginBottom: 12 },
+  editBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 20 },
+  editCard: { backgroundColor: c.card, borderRadius: 14, padding: 20, maxHeight: "90%" },
+  editTitle: { fontSize: 18, fontWeight: "700", color: c.text, textAlign: "center", marginBottom: 12 },
+  editLabel: { fontSize: 18, fontWeight: "bold", color: c.text, marginBottom: 12 },
   activityGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 16 },
   activityButton: { borderWidth: 4, width: "48%", padding: 5, marginBottom: 10, alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 5, flexDirection: "row", height: 56 },
-  activityButtonSelected: { borderColor: "black" },
-  neutralButton: { width: "48%", height: 56, marginBottom: 10, borderRadius: 5, borderWidth: 4, borderColor: "#dadce0", backgroundColor: "#eceff1", alignItems: "center", justifyContent: "center" },
-  neutralButtonActive: { borderColor: "#111" },
-  neutralButtonText: { color: "#3c4043", fontWeight: "600" },
+  activityButtonSelected: { borderColor: c.text },
+  neutralButton: { width: "48%", height: 56, marginBottom: 10, borderRadius: 5, borderWidth: 4, borderColor: c.border, backgroundColor: c.cardBorder, alignItems: "center", justifyContent: "center" },
+  neutralButtonActive: { borderColor: c.text },
+  neutralButtonText: { color: c.textBody, fontWeight: "600" },
   feelingRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
   feelingItem: { flex: 1, alignItems: "center", justifyContent: "center" },
-  feelingKeep: { fontSize: 11, color: "#5f6368", fontWeight: "600" },
-  feelingKeepActive: { color: "#007bff" },
+  feelingKeep: { fontSize: 11, color: c.textMuted, fontWeight: "600" },
+  feelingKeepActive: { color: c.primary },
   editActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 4 },
 
-  noteBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-  noteCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20 },
-  noteTitle: { fontSize: 18, fontWeight: "700", color: "#111" },
-  noteHint: { fontSize: 13, color: "#5f6368", marginTop: 4, marginBottom: 12 },
-  noteInput: { borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, padding: 12, fontSize: 15, color: "#111", minHeight: 90, textAlignVertical: "top" },
+  noteBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 24 },
+  noteCard: { backgroundColor: c.card, borderRadius: 14, padding: 20 },
+  noteTitle: { fontSize: 18, fontWeight: "700", color: c.text },
+  noteHint: { fontSize: 13, color: c.textMuted, marginTop: 4, marginBottom: 12 },
+  noteInput: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15, color: c.text, minHeight: 90, textAlignVertical: "top" },
   noteActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 16 },
   noteCancel: { paddingVertical: 10, paddingHorizontal: 16 },
-  noteCancelText: { color: "#5f6368", fontSize: 16, fontWeight: "600" },
-  noteSave: { backgroundColor: "#1a73e8", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  noteSaveText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  noteCancelText: { color: c.textMuted, fontSize: 16, fontWeight: "600" },
+  noteSave: { backgroundColor: c.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  noteSaveText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
 
   legend: { marginTop: 12, marginBottom: 16 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendSwatch: { width: 14, height: 14, borderRadius: 3 },
-  legendText: { fontSize: 12, color: "#3c4043" },
+  legendText: { fontSize: 12, color: c.textBody },
 });

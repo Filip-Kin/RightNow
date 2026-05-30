@@ -1,12 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 
+export type ThemePref = "light" | "dark" | "system";
+
 export interface Config {
   hour24: boolean;
   reminderHour: number; // local hour (0-23) for the daily end-of-day reminder
   // How far back the catch-up flow looks for unlogged hours. Bounds the "to log"
   // count so a year-old import never demands thousands of entries.
   catchUpWindowHours: number;
+  theme: ThemePref; // light | dark | follow system
 }
 
 const listeners = new Set<(config: Config) => void>();
@@ -16,7 +19,20 @@ function parse(value: string | null): Config {
   config.hour24 ??= false;
   config.reminderHour ??= 21;
   config.catchUpWindowHours ??= 24;
+  config.theme ??= "system";
   return config;
+}
+
+/** Subscribe to config changes without the Suspense throw of useConfig (safe in
+ *  any component, e.g. the theme hook). */
+export function subscribeConfig(fn: (config: Config) => void): () => void {
+  listeners.add(fn);
+  return () => void listeners.delete(fn);
+}
+
+/** Current theme preference (or "system" before config has loaded). */
+export function getThemePref(): ThemePref {
+  return config?.theme ?? "system";
 }
 
 let config!: Config;

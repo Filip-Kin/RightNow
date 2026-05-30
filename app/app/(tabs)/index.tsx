@@ -1,5 +1,6 @@
 import { AnimatedText } from "@/components/AnimatedText";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { useTheme } from "@/lib/theme";
 import { useConfig } from "@/lib/config";
 import { sync, useUnloggedHours } from "@/lib/entries";
 import {
@@ -18,6 +19,7 @@ import {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const c = useTheme();
 
   // Pull remote changes (and push anything pending) when the home screen opens.
   useEffect(() => {
@@ -29,13 +31,13 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer>
-    <SafeAreaView>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
       <Suspense fallback={<></>}>
         <PermissionAlert />
       </Suspense>
 
       <View className="p-4">
-        <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center" }}>
+        <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center", color: c.text }}>
           RightNow
         </Text>
         {behindCount <= 0
@@ -43,30 +45,30 @@ export default function HomeScreen() {
             <View
               style={{
                 borderWidth: 1,
-                borderColor: "rgba(0,0,0,0.1)",
+                borderColor: c.borderFaint,
                 alignItems: "center",
                 justifyContent: "center",
                 width: "50%",
                 aspectRatio: 1,
-                backgroundColor: "#fff5",
+                backgroundColor: c.surface,
                 borderRadius: 9999,
                 margin: "auto",
                 marginTop: 32,
               }}
             >
-              <Text style={{ fontSize: 24 }}>You're all caught up!</Text>
+              <Text style={{ fontSize: 24, color: c.text }}>You're all caught up!</Text>
             </View>
           )
           : (
             <TouchableOpacity
               style={{
                 borderWidth: 1,
-                borderColor: "rgba(0,0,0,0.2)",
+                borderColor: c.border,
                 alignItems: "center",
                 justifyContent: "center",
                 width: "50%",
                 aspectRatio: 1,
-                backgroundColor: "#fff",
+                backgroundColor: c.card,
                 borderRadius: 9999,
                 margin: "auto",
                 marginTop: 32,
@@ -75,7 +77,7 @@ export default function HomeScreen() {
                 router.push({ pathname: "/log" });
               }}
             >
-              <Text style={{ fontSize: 24 }}>
+              <Text style={{ fontSize: 24, color: c.text }}>
                 Log {behindCount} {behindCount === 1 ? "entry" : "entries"}
               </Text>
             </TouchableOpacity>

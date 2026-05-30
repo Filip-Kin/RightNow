@@ -12,12 +12,14 @@ import {
 } from "@/lib/activities";
 import { buildCsv, buildPrintHtml, type LegendEntry, type YearGridDay } from "@/lib/export";
 import { printPdf, saveExport } from "@/lib/share";
+import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const EMPTY = "#f0f0f0";
 type Metric = "activity" | "feeling";
 
 export default function YearScreen() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const entries = useEntries();
   const notes = useNotes();
   useActivities();
@@ -55,9 +57,9 @@ export default function YearScreen() {
   }, [byDate, year, notes]);
 
   function cellColor(e: LocalEntry | undefined): string {
-    if (!e) return EMPTY;
-    if (metric === "feeling") return e.feeling != null ? feelingColors[e.feeling] : EMPTY;
-    return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : EMPTY;
+    if (!e) return c.empty;
+    if (metric === "feeling") return e.feeling != null ? feelingColors[e.feeling] : c.empty;
+    return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : c.empty;
   }
 
   function valueFor(e: LocalEntry | undefined, m: Metric): number | null {
@@ -168,29 +170,29 @@ export default function YearScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   yearNav: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 24, paddingTop: 4, paddingBottom: 8 },
-  navBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#f1f3f4" },
+  navBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: c.surface2 },
   navBtnDisabled: { opacity: 0.35 },
-  navBtnText: { fontSize: 24, color: "#1a73e8", fontWeight: "700", marginTop: -2 },
-  yearLabel: { fontSize: 26, fontWeight: "800", color: "#111", minWidth: 80, textAlign: "center" },
+  navBtnText: { fontSize: 24, color: c.primary, fontWeight: "700", marginTop: -2 },
+  yearLabel: { fontSize: 26, fontWeight: "800", color: c.text, minWidth: 80, textAlign: "center" },
 
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10, gap: 8, flexWrap: "wrap" },
-  modeBtn: { borderWidth: 1, borderColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
-  modeText: { color: "#1a73e8", fontWeight: "600", fontSize: 13 },
+  modeBtn: { borderWidth: 1, borderColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
+  modeText: { color: c.primary, fontWeight: "600", fontSize: 13 },
   exportRow: { flexDirection: "row", gap: 8 },
-  exportBtn: { backgroundColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
-  exportText: { color: "#fff", fontWeight: "600", fontSize: 13 },
+  exportBtn: { backgroundColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  exportText: { color: c.onPrimary, fontWeight: "600", fontSize: 13 },
 
   headerRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "flex-end", marginBottom: 2 },
   headerCell: { flex: 1, alignItems: "center" },
-  headerText: { fontSize: 8, color: "#9aa0a6" },
+  headerText: { fontSize: 8, color: c.textFaint },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
   dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
-  dayLabelNote: { backgroundColor: "#ffe082", borderWidth: 1, borderColor: "#f5b800" },
-  noteDot: { fontSize: 7, color: "#b06000" },
-  dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
-  dayWeekday: { fontSize: 9, color: "#9aa0a6" },
+  dayLabelNote: { backgroundColor: c.noteHighlight, borderWidth: 1, borderColor: c.noteBorder },
+  noteDot: { fontSize: 7, color: c.noteDot },
+  dayLabel: { fontSize: 11, fontWeight: "600", color: c.textBody },
+  dayWeekday: { fontSize: 9, color: c.textFaint },
   cell: { flex: 1, height: 14, marginHorizontal: 0.5, borderRadius: 2 },
 });

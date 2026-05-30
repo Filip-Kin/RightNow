@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useThemedStyles, type Colors } from '@/lib/theme';
 
 interface ProgressIndicatorProps {
   current: number;
@@ -7,6 +8,7 @@ interface ProgressIndicatorProps {
 }
 
 const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({ current, total }) => {
+  const styles = useThemedStyles(makeStyles);
   const showGaps = total <= 12;
 
   return (
@@ -33,7 +35,7 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({ current, total })
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Colors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -42,30 +44,31 @@ const styles = StyleSheet.create({
   text: {
     marginRight: 10,
     fontWeight: 'bold',
+    color: c.text,
   },
   progressBarContainer: {
     flex: 1,
     height: 8,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: c.track,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#007bff',
+    backgroundColor: c.primary,
   },
   gapsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     flex: 1,
     gap: 4,
-    backgroundColor: '#fff',
+    backgroundColor: c.bg,
   },
   gapSegment: {
     flex: 1,
     marginHorizontal: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: c.track,
   },
   filledSegment: {
-    backgroundColor: '#007bff',
+    backgroundColor: c.primary,
   },
 });
 

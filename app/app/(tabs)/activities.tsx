@@ -14,8 +14,11 @@ import {
   ActivityDef, COLOR_CHOICES, getContrastingTextColor, ICON_CHOICES,
   nextFreeIndex, removeActivity, upsertActivity, useActivities,
 } from "@/lib/activities";
+import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 export default function ActivitiesScreen() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const activities = useActivities();
   // `draft` is the activity being edited; `originalIndex` tracks an in-flight
   // index change so we can drop the old slot. null = editor closed.
@@ -49,7 +52,7 @@ export default function ActivitiesScreen() {
           </TouchableOpacity>
         ))}
         <TouchableOpacity style={styles.addButton} onPress={openNew}>
-          <Icon name="add" style={{ color: "#1a73e8" }} />
+          <Icon name="add" style={{ color: c.primary }} />
           <Text style={styles.addText}>Add activity</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -75,6 +78,8 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
   onChange: (d: ActivityDef) => void;
   onClose: () => void;
 }) {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Entry count for the slot being edited, to warn before deleting real data.
@@ -126,13 +131,13 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
 
             <Text style={styles.fieldLabel}>Color</Text>
             <View style={styles.choiceWrap}>
-              {COLOR_CHOICES.map((c) => (
+              {COLOR_CHOICES.map((col) => (
                 <TouchableOpacity
-                  key={c}
-                  style={[styles.colorChoice, { backgroundColor: c }, draft.color === c && styles.choiceSelected]}
-                  onPress={() => onChange({ ...draft, color: c })}
+                  key={col}
+                  style={[styles.colorChoice, { backgroundColor: col }, draft.color === col && styles.choiceSelected]}
+                  onPress={() => onChange({ ...draft, color: col })}
                 >
-                  {draft.color === c && <Icon name="check" style={{ color: getContrastingTextColor(c) }} />}
+                  {draft.color === col && <Icon name="check" style={{ color: getContrastingTextColor(col) }} />}
                 </TouchableOpacity>
               ))}
             </View>
@@ -145,7 +150,7 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
                   style={[styles.iconChoice, draft.icon === ic && styles.choiceSelected]}
                   onPress={() => onChange({ ...draft, icon: ic })}
                 >
-                  <Icon name={ic} style={{ color: draft.icon === ic ? "#1a73e8" : "#444" }} />
+                  <Icon name={ic} style={{ color: draft.icon === ic ? c.primary : c.textBody }} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -200,42 +205,42 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  hint: { color: "#5f6368", fontSize: 13, marginBottom: 12, lineHeight: 18 },
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
+  hint: { color: c.textMuted, fontSize: 13, marginBottom: 12, lineHeight: 18 },
   row: {
     flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1,
-    borderBottomColor: "#eee", gap: 12,
+    borderBottomColor: c.cardBorder, gap: 12,
   },
   swatch: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  rowName: { flex: 1, fontSize: 16, color: "#111", fontWeight: "500" },
-  rowIndex: { color: "#9aa0a6", fontSize: 14, fontVariant: ["tabular-nums"] },
+  rowName: { flex: 1, fontSize: 16, color: c.text, fontWeight: "500" },
+  rowIndex: { color: c.textFaint, fontSize: 14, fontVariant: ["tabular-nums"] },
   addButton: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 16 },
-  addText: { color: "#1a73e8", fontSize: 16, fontWeight: "600" },
+  addText: { color: c.primary, fontSize: 16, fontWeight: "600" },
 
-  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: "#fff", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: "90%" },
-  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: "#111" },
-  fieldLabel: { fontSize: 13, fontWeight: "700", color: "#3c4043", marginTop: 14, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: "#111" },
-  inputError: { borderColor: "#d93025" },
-  errorText: { color: "#d93025", fontSize: 12, marginTop: 4 },
+  modalBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "flex-end" },
+  modalCard: { backgroundColor: c.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, maxHeight: "90%" },
+  modalTitle: { fontSize: 20, fontWeight: "700", marginBottom: 12, color: c.text },
+  fieldLabel: { fontSize: 13, fontWeight: "700", color: c.textBody, marginTop: 14, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text },
+  inputError: { borderColor: c.danger },
+  errorText: { color: c.danger, fontSize: 12, marginTop: 4 },
   choiceWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   colorChoice: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
-  iconChoice: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#eee", backgroundColor: "#fafafa" },
-  choiceSelected: { borderColor: "#1a73e8" },
+  iconChoice: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: c.cardBorder, backgroundColor: c.surfaceAlt },
+  choiceSelected: { borderColor: c.primary },
   switchRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 20 },
-  switchLabel: { fontSize: 15, fontWeight: "600", color: "#111" },
-  switchHint: { fontSize: 12, color: "#5f6368", marginTop: 2 },
+  switchLabel: { fontSize: 15, fontWeight: "600", color: c.text },
+  switchHint: { fontSize: 12, color: c.textMuted, marginTop: 2 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 20 },
   cancelBtn: { paddingVertical: 10, paddingHorizontal: 16 },
-  cancelText: { color: "#5f6368", fontSize: 16, fontWeight: "600" },
-  saveBtn: { backgroundColor: "#1a73e8", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  saveBtnDisabled: { backgroundColor: "#b0c5e8" },
-  saveText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  deleteBtn: { backgroundColor: "#d93025", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  cancelText: { color: c.textMuted, fontSize: 16, fontWeight: "600" },
+  saveBtn: { backgroundColor: c.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  saveBtnDisabled: { backgroundColor: c.primaryDisabled },
+  saveText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
+  deleteBtn: { backgroundColor: c.danger, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   deleteLink: { marginTop: 18, alignItems: "center" },
-  deleteLinkText: { color: "#d93025", fontSize: 15, fontWeight: "600" },
-  confirmRow: { marginTop: 18, padding: 12, backgroundColor: "#fce8e6", borderRadius: 8 },
-  confirmText: { color: "#5f1f1a", fontSize: 14, lineHeight: 19 },
+  deleteLinkText: { color: c.danger, fontSize: 15, fontWeight: "600" },
+  confirmRow: { marginTop: 18, padding: 12, backgroundColor: c.dangerSoft, borderRadius: 8 },
+  confirmText: { color: c.danger, fontSize: 14, lineHeight: 19 },
 });

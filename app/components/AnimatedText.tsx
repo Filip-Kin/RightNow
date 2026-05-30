@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { useThemedStyles, type Colors } from "@/lib/theme";
 
 const gap = 8;
 
 export function AnimatedText({ text }: { text: string }) {
+  const styles = useThemedStyles(makeStyles);
   const [currentText, setCurrentText] = useState(text);
   const [nextText, setNextText] = useState(text);
 
@@ -86,7 +88,7 @@ export function AnimatedText({ text }: { text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Colors) => StyleSheet.create({
   container: {
     display: "flex",
     flexDirection: "row",
@@ -94,7 +96,7 @@ const styles = StyleSheet.create({
   },
   text: {
     position: "absolute",
-    color: "#007bff",
+    color: c.primary,
     fontWeight: "bold",
     fontSize: 42,
   },

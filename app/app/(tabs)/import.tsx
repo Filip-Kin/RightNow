@@ -18,6 +18,7 @@ import {
   COLOR_CHOICES, getActivity, getContrastingTextColor, ICON_CHOICES,
   upsertActivity, useActivities,
 } from "@/lib/activities";
+import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 type Metric = "activity" | "feeling";
 // For each source index: the existing activity index to map onto, or "create".
@@ -34,6 +35,8 @@ async function readPickedFile(asset: DocumentPicker.DocumentPickerAsset): Promis
 }
 
 export default function ImportScreen() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const activities = useActivities();
   const [metric, setMetric] = useState<Metric>("activity");
   const [year, setYear] = useState<string>(String(new Date().getFullYear()));
@@ -161,7 +164,7 @@ export default function ImportScreen() {
 
         {!parsed && (
           <TouchableOpacity style={styles.primaryBtn} onPress={pickFile}>
-            <Icon name="upload-file" style={{ color: "#fff" }} />
+            <Icon name="upload-file" style={{ color: c.onPrimary }} />
             <Text style={styles.primaryText}>Choose CSV file</Text>
           </TouchableOpacity>
         )}
@@ -213,7 +216,7 @@ export default function ImportScreen() {
                           style={[styles.chip, styles.createChip, choices[src] === "create" && styles.createChipActive]}
                           onPress={() => setChoices((c) => ({ ...c, [src]: "create" }))}
                         >
-                          <Text style={[styles.chipText, choices[src] === "create" && { color: "#fff" }]}>
+                          <Text style={[styles.chipText, choices[src] === "create" && { color: c.onPrimary }]}>
                             ＋ New "{srcName}"
                           </Text>
                         </TouchableOpacity>
@@ -233,7 +236,7 @@ export default function ImportScreen() {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.primaryBtn, styles.importBtn, busy && styles.disabled]} onPress={runImport} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Import</Text>}
+                {busy ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.primaryText}>Import</Text>}
               </TouchableOpacity>
             </View>
           </>
@@ -252,34 +255,34 @@ function nextFreeIndexExcluding(used: Set<number>): number {
   return i;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  hint: { color: "#5f6368", fontSize: 13, marginBottom: 12, lineHeight: 18 },
-  label: { fontSize: 16, fontWeight: "bold", marginTop: 16, marginBottom: 8, color: "#3c4043" },
-  segment: { flexDirection: "row", borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, overflow: "hidden" },
-  segmentItem: { flex: 1, paddingVertical: 10, alignItems: "center", backgroundColor: "#fff" },
-  segmentItemActive: { backgroundColor: "#1a73e8" },
-  segmentText: { fontSize: 15, fontWeight: "600", color: "#3c4043" },
-  segmentTextActive: { color: "#fff" },
-  input: { borderWidth: 1, borderColor: "#dadce0", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: "#111" },
-  primaryBtn: { flexDirection: "row", gap: 8, backgroundColor: "#1a73e8", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", justifyContent: "center", marginTop: 20 },
-  primaryText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  errorText: { color: "#d93025", marginTop: 14, fontSize: 14 },
-  resultBox: { marginTop: 16, padding: 14, backgroundColor: "#e6f4ea", borderRadius: 8 },
-  resultText: { color: "#137333", fontSize: 15, fontWeight: "600" },
-  summary: { marginTop: 16, color: "#3c4043", fontSize: 13, fontStyle: "italic" },
-  mapRow: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#eee" },
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
+  hint: { color: c.textMuted, fontSize: 13, marginBottom: 12, lineHeight: 18 },
+  label: { fontSize: 16, fontWeight: "bold", marginTop: 16, marginBottom: 8, color: c.textBody },
+  segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden" },
+  segmentItem: { flex: 1, paddingVertical: 10, alignItems: "center", backgroundColor: c.card },
+  segmentItemActive: { backgroundColor: c.primary },
+  segmentText: { fontSize: 15, fontWeight: "600", color: c.textBody },
+  segmentTextActive: { color: c.onPrimary },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, color: c.text },
+  primaryBtn: { flexDirection: "row", gap: 8, backgroundColor: c.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, alignItems: "center", justifyContent: "center", marginTop: 20 },
+  primaryText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
+  errorText: { color: c.danger, marginTop: 14, fontSize: 14 },
+  resultBox: { marginTop: 16, padding: 14, backgroundColor: c.successSoft, borderRadius: 8 },
+  resultText: { color: c.successText, fontSize: 15, fontWeight: "600" },
+  summary: { marginTop: 16, color: c.textBody, fontSize: 13, fontStyle: "italic" },
+  mapRow: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.cardBorder },
   mapHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  mapSource: { fontSize: 15, fontWeight: "700", color: "#111" },
-  conflictTag: { fontSize: 12, color: "#b06000", backgroundColor: "#fef7e0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  mapSource: { fontSize: 15, fontWeight: "700", color: c.text },
+  conflictTag: { fontSize: 12, color: c.noteDot, backgroundColor: c.warnSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
-  chipText: { fontSize: 13, color: "#3c4043", fontWeight: "500" },
-  createChip: { borderColor: "#1a73e8", borderStyle: "dashed" },
-  createChipActive: { backgroundColor: "#1a73e8" },
+  chipText: { fontSize: 13, color: c.textBody, fontWeight: "500" },
+  createChip: { borderColor: c.primary, borderStyle: "dashed" },
+  createChipActive: { backgroundColor: c.primary },
   actions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 24 },
   importBtn: { marginTop: 0, minWidth: 110 },
   cancelBtn: { paddingVertical: 12, paddingHorizontal: 16, justifyContent: "center" },
-  cancelText: { color: "#5f6368", fontSize: 16, fontWeight: "600" },
+  cancelText: { color: c.textMuted, fontSize: 16, fontWeight: "600" },
   disabled: { opacity: 0.6 },
 });

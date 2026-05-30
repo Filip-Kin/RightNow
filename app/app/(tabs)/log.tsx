@@ -15,6 +15,7 @@ import {
   getContrastingTextColor,
   lightenColor,
 } from "@/lib/activities";
+import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 const monthNames = [
   "Jan",
@@ -50,6 +51,8 @@ function hourLabel(hour: number, hour24: boolean) {
 }
 
 export default function Index() {
+  const c = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const config = useConfig();
   const activities = useActivities();
@@ -144,7 +147,7 @@ export default function Index() {
           onPress={() => cursor > 0 && setCursor((c) => c - 1)}
           disabled={cursor === 0}
         >
-          <Icon name="arrow-back" style={{ color: cursor === 0 ? "#ccc" : "#1a73e8" }} />
+          <Icon name="arrow-back" style={{ color: cursor === 0 ? c.textFaint : c.primary }} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <ProgressIndicator current={cursor} total={queue.length} />
@@ -154,7 +157,7 @@ export default function Index() {
           onPress={() => canForward && setCursor((c) => c + 1)}
           disabled={!canForward}
         >
-          <Icon name="arrow-forward" style={{ color: canForward ? "#1a73e8" : "#ccc" }} />
+          <Icon name="arrow-forward" style={{ color: canForward ? c.primary : c.textFaint }} />
         </TouchableOpacity>
       </View>
       <View
@@ -198,7 +201,7 @@ export default function Index() {
         <Text style={styles.label}>How are you feeling?</Text>
         <View style={styles.activityGrid}>
           {feelingList.map((feeling, index) => {
-            const color = selectedFeeling === index ? "#007bff" : "#000000";
+            const color = selectedFeeling === index ? c.primary : c.text;
             return (
               <TouchableOpacity
                 key={index}
@@ -231,9 +234,9 @@ export default function Index() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Colors) => StyleSheet.create({
   modalContent: {
-    backgroundColor: "white",
+    backgroundColor: c.bg,
     padding: 20,
     borderRadius: 10,
     flex: 1,
@@ -272,7 +275,7 @@ const styles = StyleSheet.create({
     height: 64,
   },
   selectedActivity: {
-    borderColor: "black",
+    borderColor: c.text,
   },
   slider: {
     width: "100%",
@@ -301,14 +304,14 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef3fe",
+    backgroundColor: c.primarySoft,
   },
   navBtnDisabled: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: c.surface2,
   },
   hintText: {
     textAlign: "center",
-    color: "#9aa0a6",
+    color: c.textFaint,
     fontSize: 13,
     paddingVertical: 8,
   },

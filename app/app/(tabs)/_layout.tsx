@@ -4,9 +4,11 @@ import { Platform } from "react-native";
 
 import { makeTabItem } from "@/components/makeTabItem";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/lib/theme";
 
 export default function TabLayout() {
   const { status } = useAuth();
+  const c = useTheme();
 
   // Gate the app behind auth. While restoring a persisted session, render nothing.
   if (status === "loading") return null;
@@ -16,7 +18,18 @@ export default function TabLayout() {
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: c.bg },
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.textFaint,
+        tabBarStyle: { backgroundColor: c.card, borderTopColor: c.cardBorder },
+        headerStyle: { backgroundColor: c.card },
+        headerTitleStyle: { color: c.text },
+        headerTintColor: c.primary,
+      }}
+    >
       {makeTabItem({ name: "index", title: "Right Now", icon: "home" })}
       {makeTabItem({ name: "history", title: "History", icon: "grid-on" })}
       {makeTabItem({ name: "insights", title: "Insights", icon: "insights" })}
