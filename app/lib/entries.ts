@@ -222,6 +222,42 @@ export async function setEntry(
     schedulePush();
 }
 
+/**
+ * Auto-fill the given hours with the Sleep activity from a Health read. Only
+ * touches hours with no logged data — a manual entry (or any non-health entry)
+ * is left alone. Prior health fills are re-labelled if the sleep activity index
+ * changed. updatedAt is the slot's real time so a later manual edit always wins
+ * LWW (locally and on the server). Returns the number of cells changed.
+ */
+export async function fillHealthSleep(
+  slots: { date: string; hour: number }[],
+  activityIndex: number,
+): Promise<number> {
+  const dek = getDEK();
+  if (!dek) throw new Error("Locked: no decryption key");
+  await loadStore();
+  let changed = 0;
+  for (const { date, hour } of slots) {
+    const id = cellId(dek, date, hour);
+    const prev = store[id];
+    // Never overwrite a manual entry; skip a health fill that's already correct.
+    if (prev && !prev.deleted && prev.source !== "health") continue;
+    if (prev && !prev.deleted && prev.source === "health" && prev.activity === activityIndex) continue;
+    store[id] = {
+      date, hour, activity: activityIndex, feeling: null,
+      source: "health", updatedAt: slotMs(date, hour), deleted: false,
+    };
+    dirty.add(id);
+    changed++;
+  }
+  if (changed) {
+    emit();
+    await persist();
+    schedulePush();
+  }
+  return changed;
+}
+
 function slotMs(date: string, hour: number): number {
     const [y, mo, d] = date.split("-").map(Number);
     return new Date(y, mo - 1, d, hour, 0, 0, 0).getTime();

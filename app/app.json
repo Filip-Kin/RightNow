@@ -16,7 +16,10 @@
         "foregroundImage": "assets/images/icon-512.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.filipkin.rightnow"
+      "package": "com.filipkin.rightnow",
+      "permissions": [
+        "android.permission.health.READ_SLEEP"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -44,7 +47,17 @@
           "cameraPermission": "RightNow uses the camera to scan a sign-in QR code from another device."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "react-native-health-connect",
+      "./plugins/withHealthConnectQueries",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

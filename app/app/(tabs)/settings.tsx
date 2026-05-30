@@ -1,5 +1,5 @@
-import React from "react";
-import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,6 +8,9 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
+import { isHealthAvailable } from "@/lib/health";
+import { syncHealthSleep } from "@/lib/healthSync";
+import { getActivities, activityColor } from "@/lib/activities";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 function syncText(s: SyncStatus, lastSyncAt: number): string {
@@ -40,10 +43,39 @@ export default function Settings() {
   const syncState = useSyncStatus();
   const router = useRouter();
 
+  const [hcAvailable, setHcAvailable] = useState<boolean | null>(null);
+  const [sleepBusy, setSleepBusy] = useState(false);
+  const [sleepMsg, setSleepMsg] = useState<string | null>(null);
+  useEffect(() => { isHealthAvailable().then(setHcAvailable); }, []);
+
   function setReminderHour(next: number) {
     const hour = (next + 24) % 24;
     config.reminderHour = hour;
     scheduleDailyReminder(hour);
+  }
+
+  async function runSleepSync(): Promise<void> {
+    setSleepBusy(true);
+    setSleepMsg(null);
+    const r = await syncHealthSleep();
+    setSleepBusy(false);
+    if (r.ok) {
+      setSleepMsg(r.filled > 0 ? `Filled ${r.filled} sleep hour${r.filled === 1 ? "" : "s"}.` : "No new sleep hours to fill.");
+    } else if (r.reason === "denied") {
+      setSleepMsg("Permission denied. Grant sleep access in Health Connect.");
+      config.healthSleepEnabled = false;
+    } else if (r.reason === "unavailable") {
+      setSleepMsg("Health Connect isn't available on this device.");
+      config.healthSleepEnabled = false;
+    } else {
+      setSleepMsg("Couldn't read sleep data. Try again.");
+    }
+  }
+
+  function toggleSleep(next: boolean) {
+    config.healthSleepEnabled = next;
+    setSleepMsg(null);
+    if (next) void runSleepSync();
   }
 
   return (
@@ -97,6 +129,53 @@ export default function Settings() {
           <Text style={styles.stepperText}>+</Text>
         </TouchableOpacity>
       </View>
+
+      {hcAvailable ? (
+        <>
+          <Text style={styles.label}>Sleep auto-fill</Text>
+          <View style={styles.sleepRow}>
+            <Text style={styles.sleepDesc}>
+              Mark unlogged hours as sleep using Health Connect. Never overwrites a manual entry.
+            </Text>
+            <Switch
+              value={config.healthSleepEnabled}
+              onValueChange={toggleSleep}
+              trackColor={{ true: c.primary, false: c.border }}
+            />
+          </View>
+          {config.healthSleepEnabled ? (
+            <>
+              <Text style={styles.sleepSub}>Which activity is sleep?</Text>
+              <View style={styles.chipsWrap}>
+                {getActivities().map((a) => {
+                  const active = a.index === config.sleepActivityIndex;
+                  return (
+                    <TouchableOpacity
+                      key={a.index}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => { config.sleepActivityIndex = a.index; setSleepMsg(null); }}
+                    >
+                      <View style={[styles.chipDot, { backgroundColor: activityColor(a.index) }]} />
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{a.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.sleepActions}>
+                <TouchableOpacity
+                  style={[styles.syncBtn, sleepBusy && styles.disabled]}
+                  disabled={sleepBusy}
+                  onPress={() => { void runSleepSync(); }}
+                >
+                  <Text style={styles.syncBtnText}>Sync sleep now</Text>
+                </TouchableOpacity>
+                {sleepBusy ? <ActivityIndicator color={c.primary} /> : null}
+              </View>
+              {sleepMsg ? <Text style={styles.sleepMsg}>{sleepMsg}</Text> : null}
+            </>
+          ) : null}
+        </>
+      ) : null}
 
       <Text style={styles.label}>Data</Text>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>
@@ -160,6 +239,17 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   stepper: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" },
   stepperText: { color: c.onPrimary, fontSize: 24, fontWeight: "700", lineHeight: 26 },
   reminderValue: { fontSize: 18, fontWeight: "600", color: c.text, minWidth: 90, textAlign: "center" },
+  sleepRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  sleepDesc: { flex: 1, fontSize: 13, color: c.textBody, lineHeight: 18 },
+  sleepSub: { fontSize: 14, fontWeight: "600", color: c.textBody, marginTop: 14, marginBottom: 8 },
+  chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: c.border, backgroundColor: c.card },
+  chipActive: { borderColor: c.primary, backgroundColor: c.surface },
+  chipDot: { width: 10, height: 10, borderRadius: 5 },
+  chipText: { fontSize: 13, color: c.textBody },
+  chipTextActive: { color: c.text, fontWeight: "700" },
+  sleepActions: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14 },
+  sleepMsg: { fontSize: 13, color: c.textMuted, marginTop: 10 },
   navItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.cardBorder },
   navText: { flex: 1, fontSize: 16, color: c.text },
   spacer: { height: 28 },

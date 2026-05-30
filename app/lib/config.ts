@@ -10,6 +10,12 @@ export interface Config {
   // count so a year-old import never demands thousands of entries.
   catchUpWindowHours: number;
   theme: ThemePref; // light | dark | follow system
+  // Auto-fill the Sleep activity from the device's Health platform (Android Health
+  // Connect for now). Only fills hours you haven't logged; never overwrites a
+  // manual entry. iOS/HealthKit is a later pass.
+  healthSleepEnabled: boolean;
+  sleepActivityIndex: number; // which activity counts as "asleep"
+  lastHealthSyncAt: number; // epoch ms of the last successful health read (0 = never)
 }
 
 const listeners = new Set<(config: Config) => void>();
@@ -20,6 +26,9 @@ function parse(value: string | null): Config {
   config.reminderHour ??= 21;
   config.catchUpWindowHours ??= 24;
   config.theme ??= "system";
+  config.healthSleepEnabled ??= false;
+  config.sleepActivityIndex ??= 0;
+  config.lastHealthSyncAt ??= 0;
   return config;
 }
 
@@ -33,6 +42,16 @@ export function subscribeConfig(fn: (config: Config) => void): () => void {
 /** Current theme preference (or "system" before config has loaded). */
 export function getThemePref(): ThemePref {
   return config?.theme ?? "system";
+}
+
+/** The live config proxy (mutations persist + notify). Undefined before load. */
+export function getConfig(): Config | undefined {
+  return config;
+}
+
+/** Resolve the config proxy, awaiting the initial load if needed. */
+export async function ensureConfig(): Promise<Config> {
+  return config ?? (await configLoading!);
 }
 
 let config!: Config;

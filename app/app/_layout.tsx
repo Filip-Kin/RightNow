@@ -2,8 +2,10 @@ import "react-native-get-random-values"; // polyfill crypto.getRandomValues (mus
 import { Stack } from "expo-router";
 import "../global.css";
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
+import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
@@ -11,6 +13,11 @@ export default function RootLayout() {
   useNotificationResponseHandler();
   useEffect(() => {
     restoreSession();
+    maybeSyncHealthOnForeground();
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") maybeSyncHealthOnForeground();
+    });
+    return () => sub.remove();
   }, []);
 
   // Web width is capped per-screen (see components/ScreenContainer) rather than by
