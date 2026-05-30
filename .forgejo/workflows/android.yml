@@ -1,0 +1,31 @@
+name: android-apk
+# Manual-only: build a sideloadable Android APK on demand (kept off the push path so
+# it never slows the web deploy). Run from the Forgejo Actions tab -> Run workflow.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: nas
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build APK (release, debug-signed, arm64-v8a)
+        run: |
+          set -eux
+          IMG="rightnow-android:${{ github.sha }}"
+          docker build -f Dockerfile.android -t "$IMG" .
+          mkdir -p out
+          cid=$(docker create "$IMG")
+          docker cp "$cid":/RightNow.apk out/RightNow.apk
+          docker rm "$cid"
+          ls -la out
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RightNow-android-arm64
+          path: out/RightNow.apk
+          if-no-files-found: error

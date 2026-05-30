@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.7
+# Builds a sideloadable Android APK for RightNow entirely in-container (the NAS CI
+# runner has Docker but no Android toolchain). Produces a release APK signed with
+# the committed debug keystore (app/ci/debug.keystore) - standalone + installable,
+# consistent signature across builds so you can update-install without uninstalling.
+# arm64-v8a only (Pixel 9 Pro) to keep the build fast and the APK small.
+#
+# Extract the APK with:
+#   cid=$(docker create <image>); docker cp "$cid":/src/app/android/app/build/outputs/apk/release/app-release.apk .; docker rm "$cid"
+FROM eclipse-temurin:17-jdk-jammy AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl unzip git ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Node 20 (RN gradle JS bundling) + Bun (JS deps + Expo CLI).
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+      && apt-get install -y --no-install-recommends nodejs && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+# Android SDK + NDK (versions pinned to Expo SDK 56 / RN 0.85).
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=${ANDROID_HOME}
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
+      && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdtools.zip \
+      && unzip -q /tmp/cmdtools.zip -d ${ANDROID_HOME}/cmdline-tools \
+      && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+      && rm /tmp/cmdtools.zip
+RUN yes | sdkmanager --licenses >/dev/null \
+      && sdkmanager --install \
+         "platform-tools" \
+         "platforms;android-35" "platforms;android-36" \
+         "build-tools;35.0.0" "build-tools;36.0.0" \
+         "ndk;27.1.12297006" "cmake;3.22.1" >/dev/null
+
+WORKDIR /src
+COPY . .
+
+# Hoisted install: RN's Gradle bundler + Expo autolinking expect an npm-style
+# node_modules (bun's isolated .bun/ layout breaks it), matching the web image.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+      bun install --linker hoisted
+
+WORKDIR /src/app
+# Generate the native android/ project from app.json + config plugins.
+RUN bunx --bun expo prebuild -p android --no-install
+# Sign every build with the same committed debug keystore (consistent signature).
+COPY app/ci/debug.keystore android/app/debug.keystore
+
+WORKDIR /src/app/android
+RUN --mount=type=cache,target=/root/.gradle \
+      ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -x lint \
+      && cp app/build/outputs/apk/release/app-release.apk /RightNow.apk
