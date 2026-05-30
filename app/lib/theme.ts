@@ -93,7 +93,9 @@ export const DARK: Colors = {
   successSoft: "#16301f",
   dangerSoft: "#3a1d1a",
   warnSoft: "#3a3416",
-  empty: "#2a2a2a",
+  // Kept well below the darkest activity color (Sleep #273036) so empty cells read
+  // as empty and don't blend with a dark activity in the grid.
+  empty: "#161616",
   track: "#2c2c2c",
   noteHighlight: "#4a3a16",
   noteBorder: "#8a6d1a",
