@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import {
   MOOD_WEIGHTS, weightedMood, weightedAvgMood, trailingMovingAverage,
   activityDistribution, avgMoodByActivity, byTimeOfDay, bestDays, moodLineSeries,
-  activityByHourOfDay,
+  activityByHourOfDay, entriesInRange,
 } from "./stats";
 import type { LocalEntry } from "./entries";
 
@@ -90,10 +90,11 @@ test("best days ranks by daily weighted mood and carries the row", () => {
 });
 
 test("mood line series: hourly for short range, smoothed", () => {
-  const now = new Date(2026, 0, 5, 12, 0, 0).getTime();
+  const start = new Date(2026, 0, 1, 0, 0, 0).getTime();
+  const end = new Date(2026, 0, 7, 23, 59, 59).getTime();
   const s = moodLineSeries([
     e("2026-1-5", 8, 3, 5), e("2026-1-5", 9, 3, 5), e("2026-1-5", 10, 9, 0),
-  ], 7, now);
+  ], start, end);
   expect(s.granularity).toBe("hour");
   expect(s.points.length).toBe(3);
   // chronological
@@ -103,11 +104,24 @@ test("mood line series: hourly for short range, smoothed", () => {
 });
 
 test("mood line series: daily aggregation for long range", () => {
-  const now = new Date(2026, 2, 1, 12, 0, 0).getTime();
+  const start = new Date(2026, 0, 1, 0, 0, 0).getTime();
+  const end = new Date(2026, 2, 1, 23, 59, 59).getTime(); // ~60 days > 31 -> daily
   const s = moodLineSeries([
     e("2026-1-1", 8, 3, 5), e("2026-1-1", 9, 3, 5),
     e("2026-2-1", 8, 9, 0),
-  ], 365, now);
+  ], start, end);
   expect(s.granularity).toBe("day");
   expect(s.points.length).toBe(2);
+});
+
+test("entriesInRange filters by inclusive [start,end]", () => {
+  const start = new Date(2026, 0, 2, 0, 0, 0).getTime();
+  const end = new Date(2026, 0, 3, 23, 59, 59).getTime();
+  const r = entriesInRange([
+    e("2026-1-1", 9, 3, 4), // before
+    e("2026-1-2", 9, 3, 4), // in
+    e("2026-1-3", 23, 3, 4), // in
+    e("2026-1-4", 0, 3, 4), // after
+  ], start, end);
+  expect(r.length).toBe(2);
 });

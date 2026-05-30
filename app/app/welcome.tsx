@@ -3,6 +3,7 @@ import { Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinkButton, PrimaryButton } from "@/components/auth-ui";
 import { useAuth } from "@/lib/auth";
+import { useThemedStyles, type Colors } from "@/lib/theme";
 
 // Filled in once beta distribution is live (Part C).
 const TESTFLIGHT_URL = "";
@@ -11,6 +12,7 @@ const PLAY_URL = "";
 export default function Welcome() {
   const router = useRouter();
   const { status } = useAuth();
+  const styles = useThemedStyles(makeStyles);
 
   if (status === "loading") return null;
   if (status === "authenticated") return <Redirect href="/" />;
@@ -48,6 +50,7 @@ export default function Welcome() {
 }
 
 function StoreBadge({ label, url }: { label: string; url: string }) {
+  const styles = useThemedStyles(makeStyles);
   const enabled = url.length > 0;
   return (
     <TouchableOpacity
@@ -61,17 +64,17 @@ function StoreBadge({ label, url }: { label: string; url: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#fff", padding: 24, justifyContent: "center", maxWidth: 520, width: "100%", alignSelf: "center" },
+const makeStyles = (c: Colors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: "center", maxWidth: 520, width: "100%", alignSelf: "center" },
   hero: { marginBottom: 40 },
-  brand: { fontSize: 44, fontWeight: "800", color: "#111", textAlign: "center" },
-  tagline: { fontSize: 18, color: "#3c4043", textAlign: "center", marginTop: 16, lineHeight: 26 },
-  privacy: { fontSize: 14, color: "#5f6368", textAlign: "center", marginTop: 16, lineHeight: 20 },
+  brand: { fontSize: 44, fontWeight: "800", color: c.text, textAlign: "center" },
+  tagline: { fontSize: 18, color: c.textBody, textAlign: "center", marginTop: 16, lineHeight: 26 },
+  privacy: { fontSize: 14, color: c.textMuted, textAlign: "center", marginTop: 16, lineHeight: 20 },
   actions: { marginBottom: 36 },
   download: { alignItems: "center" },
-  downloadLabel: { fontSize: 13, fontWeight: "700", color: "#5f6368", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
+  downloadLabel: { fontSize: 13, fontWeight: "700", color: c.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
   badges: { flexDirection: "row", gap: 12, flexWrap: "wrap", justifyContent: "center" },
-  badge: { borderWidth: 1, borderColor: "#111", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18 },
-  badgeDisabled: { borderColor: "#dadce0" },
-  badgeText: { fontSize: 15, fontWeight: "600", color: "#111" },
+  badge: { borderWidth: 1, borderColor: c.text, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 18 },
+  badgeDisabled: { borderColor: c.border },
+  badgeText: { fontSize: 15, fontWeight: "600", color: c.text },
 });

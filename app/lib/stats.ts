@@ -63,17 +63,12 @@ export function slotMs(date: string, hour: number): number {
   return new Date(y, mo - 1, d, hour, 0, 0, 0).getTime();
 }
 
-/** Local midnight `daysBack` days before `now`. */
-function startOfDay(now: number, daysBack = 0): number {
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime() - daysBack * DAY_MS;
-}
-
-/** Entries whose slot falls within the last `rangeDays` (today + previous days). */
-export function entriesInRange(entries: LocalEntry[], rangeDays: number, now: number): LocalEntry[] {
-  const cutoff = startOfDay(now, rangeDays - 1);
-  return entries.filter((e) => slotMs(e.date, e.hour) >= cutoff);
+/** Entries whose slot falls within the inclusive [startMs, endMs] range. */
+export function entriesInRange(entries: LocalEntry[], startMs: number, endMs: number): LocalEntry[] {
+  return entries.filter((e) => {
+    const t = slotMs(e.date, e.hour);
+    return t >= startMs && t <= endMs;
+  });
 }
 // #endregion
 
@@ -220,55 +215,53 @@ export interface MoodSeries {
 }
 
 /**
- * The smoothed weighted-mood line for the line graph. Short ranges (<= 30d) plot
- * the hourly series for fine detail; longer ranges aggregate to one daily
- * weighted-average per day (a year of hourly points is unreadable). Either way the
- * 3-point trailing moving average ("decay") is applied over the chronological
- * grid, so gaps in logging don't fabricate a flat line.
+ * The smoothed weighted-mood line over the inclusive [startMs, endMs] range. Short
+ * spans (<= 31 days) plot the hourly series for fine detail; longer spans aggregate
+ * to one daily weighted-average per day (a year of hourly points is unreadable).
+ * Either way the 3-point trailing moving average ("decay") is applied over the
+ * chronological grid, so gaps in logging don't fabricate a flat line.
  */
-export function moodLineSeries(entries: LocalEntry[], rangeDays: number, now: number): MoodSeries {
-  const granularity: "hour" | "day" = rangeDays <= 30 ? "hour" : "day";
-  const inRange = entriesInRange(entries, rangeDays, now);
+export function moodLineSeries(entries: LocalEntry[], startMs: number, endMs: number): MoodSeries {
+  const spanDays = (endMs - startMs) / DAY_MS;
+  const granularity: "hour" | "day" = spanDays <= 31 ? "hour" : "day";
+  const inRange = entriesInRange(entries, startMs, endMs);
 
   if (granularity === "hour") {
-    const start = startOfDay(now, rangeDays - 1);
-    const slots = Math.ceil((now - start) / HOUR_MS) + 1;
+    const slots = Math.floor((endMs - startMs) / HOUR_MS) + 1;
     const raw: (number | null)[] = new Array(slots).fill(null);
-    const at = new Map<number, number>(); // slot index -> weighted mood
     for (const e of inRange) {
       if (e.feeling == null) continue;
-      const idx = Math.round((slotMs(e.date, e.hour) - start) / HOUR_MS);
-      if (idx >= 0 && idx < slots) at.set(idx, weightedMood(e.feeling));
+      const idx = Math.round((slotMs(e.date, e.hour) - startMs) / HOUR_MS);
+      if (idx >= 0 && idx < slots) raw[idx] = weightedMood(e.feeling);
     }
-    for (const [idx, v] of at) raw[idx] = v;
     const smoothed = trailingMovingAverage(raw, 3);
     const points: MoodPoint[] = [];
     for (let i = 0; i < smoothed.length; i++) {
       const v = smoothed[i];
-      if (v != null) points.push({ t: start + i * HOUR_MS, value: v });
+      if (v != null) points.push({ t: startMs + i * HOUR_MS, value: v });
     }
     return { points, granularity };
   }
 
   // Daily: weighted avg per day, then trailing MA across consecutive days.
-  const start = startOfDay(now, rangeDays - 1);
+  const days = Math.floor((endMs - startMs) / DAY_MS) + 1;
   const feelsByDayIdx = new Map<number, number[]>();
   for (const e of inRange) {
     if (e.feeling == null) continue;
-    const dayIdx = Math.floor((slotMs(e.date, e.hour) - start) / DAY_MS);
+    const dayIdx = Math.floor((slotMs(e.date, e.hour) - startMs) / DAY_MS);
     const arr = feelsByDayIdx.get(dayIdx) ?? [];
     arr.push(e.feeling);
     feelsByDayIdx.set(dayIdx, arr);
   }
-  const raw: (number | null)[] = new Array(rangeDays).fill(null);
+  const raw: (number | null)[] = new Array(days).fill(null);
   for (const [dayIdx, feels] of feelsByDayIdx) {
-    if (dayIdx >= 0 && dayIdx < rangeDays) raw[dayIdx] = weightedAvgMood(feels);
+    if (dayIdx >= 0 && dayIdx < days) raw[dayIdx] = weightedAvgMood(feels);
   }
   const smoothed = trailingMovingAverage(raw, 3);
   const points: MoodPoint[] = [];
   for (let i = 0; i < smoothed.length; i++) {
     const v = smoothed[i];
-    if (v != null) points.push({ t: start + i * DAY_MS, value: v });
+    if (v != null) points.push({ t: startMs + i * DAY_MS, value: v });
   }
   return { points, granularity };
 }

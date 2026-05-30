@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Browser autofill (web) overrides input backgrounds with its own light color, which
+   made email/password text show as white-on-light in dark mode. Force the autofill
+   styling to match the theme. The inset box-shadow paints over the autofill colour. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #111111;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  caret-color: #111111;
+  transition: background-color 99999s ease-in-out 0s;
+}
+@media (prefers-color-scheme: dark) {
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #f5f5f5;
+    -webkit-box-shadow: 0 0 0 1000px #2b2b2b inset;
+    caret-color: #f5f5f5;
+  }
+}

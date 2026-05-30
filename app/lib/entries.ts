@@ -377,8 +377,10 @@ function classifySyncError(e: unknown): SyncStatus {
 }
 // #endregion
 
-/** Push local changes, pull remote changes (LWW merge). Never throws; updates sync status. */
-export async function sync(): Promise<void> {
+/** Push local changes, pull remote changes (LWW merge). Never throws; updates sync
+ *  status. `onProgress(done,total)` reports the pull+decrypt phase (the slow part on
+ *  a fresh device) so a sign-in screen can show a download bar. */
+export async function sync(onProgress?: (done: number, total: number) => void): Promise<void> {
     const dek = getDEK();
     if (!dek) return;
     setSyncStatus("syncing");
@@ -388,8 +390,18 @@ export async function sync(): Promise<void> {
 
     const res = await trpc.entries.pull.query({ since: cursor || undefined });
     const cfgId = configCellId(dek);
+    const total = res.records.length;
+    onProgress?.(0, total);
     let changed = false;
+    let processed = 0;
     for (const r of res.records) {
+        processed++;
+        // Yield every so often so a big decrypt loop doesn't freeze the UI and the
+        // progress bar can repaint.
+        if (processed % 250 === 0) {
+            onProgress?.(processed, total);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
         // The taxonomy config rides the same table as one reserved cell; route it.
         if (r.cellId === cfgId) {
             if (applyPulledConfig(dek, r)) changed = true;
@@ -418,6 +430,7 @@ export async function sync(): Promise<void> {
         }
     }
     cursor = res.cursor;
+    onProgress?.(total, total);
     if (changed) emit();
     await persist();
     setSyncStatus("ok");

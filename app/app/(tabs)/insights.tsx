@@ -1,11 +1,13 @@
-// Insights: stats over the selected range (7/30/90/365d), replicating the original
-// WAYDRN spreadsheet's mood model (weighting + 3-point trailing-average decay; see
-// lib/stats.ts). Reads the local decrypted store (useEntries) + taxonomy.
+// Insights: stats over a chosen date range (wakatime-style picker), replicating the
+// original WAYDRN spreadsheet's mood model (weighting + 3-point trailing-average
+// decay; see lib/stats.ts). Reads the local decrypted store (useEntries) + taxonomy.
 import React, { useMemo, useState } from "react";
 import { LayoutChangeEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { DonutChart, HBar, LineChart } from "@/components/charts";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { presetRange, type DateRange } from "@/lib/dateRange";
 import { useEntries, type LocalEntry } from "@/lib/entries";
 import {
   activityColor, activityName, feelingColors, feelings, getActivity, useActivities,
@@ -16,7 +18,6 @@ import {
 } from "@/lib/stats";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
-const RANGES = [7, 30, 90, 365] as const;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Map a weighted mood value (0-5) to a feeling-ramp color for the heat strips. */
@@ -43,26 +44,26 @@ export default function InsightsScreen() {
   const styles = useThemedStyles(makeStyles);
   const entries = useEntries();
   useActivities(); // re-render on taxonomy edits (colors/names)
-  const [range, setRange] = useState<number>(30);
+  const [now] = useState(() => Date.now()); // stable for presets/labels this session
+  const [dr, setDr] = useState<DateRange>(() => presetRange("last30", now));
   const [width, setWidth] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const stats = useMemo(() => {
-    const now = Date.now();
-    const inRange = entriesInRange(entries, range, now);
+    const inRange = entriesInRange(entries, dr.startMs, dr.endMs);
     const feels: number[] = [];
     for (const e of inRange) if (e.feeling != null) feels.push(e.feeling);
     return {
       logged: inRange.length,
       avgMood: weightedAvgMood(feels),
-      series: moodLineSeries(entries, range, now),
+      series: moodLineSeries(entries, dr.startMs, dr.endMs),
       dist: activityDistribution(inRange),
       byActivity: avgMoodByActivity(inRange),
       timeOfDay: byTimeOfDay(inRange),
       activityHeat: activityByHourOfDay(inRange),
       best: bestDays(inRange, 5),
     };
-  }, [entries, range]);
+  }, [entries, dr]);
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
   const chartW = Math.max(0, width - 32); // minus card padding
@@ -73,13 +74,7 @@ export default function InsightsScreen() {
         <Text style={styles.heading}>Insights</Text>
 
         <View style={styles.segmentWrap}>
-          <View style={styles.segment}>
-            {RANGES.map((r) => (
-              <TouchableOpacity key={r} style={[styles.segItem, range === r && styles.segItemActive]} onPress={() => setRange(r)}>
-                <Text style={[styles.segText, range === r && styles.segTextActive]}>{r}d</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <DateRangePicker value={dr} onChange={setDr} now={now} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} onLayout={onLayout}>
