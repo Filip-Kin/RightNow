@@ -22,15 +22,6 @@ export default function RootLayout() {
         name="recovery-code"
         options={{ presentation: "modal", headerShown: false, gestureEnabled: false }}
       />
-      <Stack.Screen
-        name="log"
-        options={{
-          presentation: "modal",
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen name="activities" options={{ title: "Activities" }} />
-      <Stack.Screen name="import" options={{ title: "Import data" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

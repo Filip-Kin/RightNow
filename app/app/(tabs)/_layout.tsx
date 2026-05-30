@@ -20,6 +20,10 @@ export default function TabLayout() {
       {makeTabItem({ name: "index", title: "Right Now", icon: "home" })}
       {makeTabItem({ name: "history", title: "History", icon: "grid-on" })}
       {makeTabItem({ name: "settings", title: "Settings", icon: "settings" })}
+      {/* In the tab navigator (so the bottom bar stays) but hidden from the bar. */}
+      <Tabs.Screen name="log" options={{ href: null }} />
+      <Tabs.Screen name="activities" options={{ href: null, headerShown: true, title: "Activities" }} />
+      <Tabs.Screen name="import" options={{ href: null, headerShown: true, title: "Import data" }} />
     </Tabs>
   );
 }

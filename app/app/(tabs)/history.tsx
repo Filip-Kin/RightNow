@@ -3,7 +3,7 @@
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
 import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
@@ -34,7 +34,11 @@ export default function HistoryScreen() {
   const [range, setRange] = useState<number>(30);
   const [mode, setMode] = useState<ColorMode>("activity");
   const [selected, setSelected] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
+  const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
+
+  // Tap pins a cell (closable); hover (web) just previews. Pinned wins.
+  const shown = selected ?? hovered;
 
   // Pull/merge on open like Home.
   useEffect(() => {
@@ -139,21 +143,24 @@ export default function HistoryScreen() {
         windowSize={11}
         renderItem={({ item }) => (
           <View style={styles.dayRow}>
-            <TouchableOpacity style={styles.dayLabelCol} onPress={() => setNoteDate(item.key)}>
-              <Text style={styles.dayLabel} numberOfLines={1}>
-                {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : ""}
-              </Text>
+            <TouchableOpacity
+              style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
+              onPress={() => setNoteDate(item.key)}
+            >
+              <Text style={styles.dayLabel} numberOfLines={1}>{item.label}</Text>
               <Text style={styles.dayWeekday}>{item.weekday}</Text>
             </TouchableOpacity>
             {item.hours.map((e, h) => (
-              <TouchableOpacity
+              <Pressable
                 key={h}
                 style={[
                   styles.cell,
                   { backgroundColor: cellColor(e) },
-                  selected?.date === item.key && selected?.hour === h && styles.cellSelected,
+                  shown?.date === item.key && shown?.hour === h && styles.cellSelected,
                 ]}
                 onPress={() => setSelected({ date: item.key, hour: h, entry: e })}
+                onHoverIn={() => setHovered({ date: item.key, hour: h, entry: e })}
+                onHoverOut={() => setHovered(null)}
               />
             ))}
           </View>
@@ -161,7 +168,14 @@ export default function HistoryScreen() {
         ListFooterComponent={<Legend mode={mode} />}
       />
 
-      {selected && <DetailBar selected={selected} note={notes[selected.date]} onClose={() => setSelected(null)} />}
+      {shown && (
+        <DetailBar
+          selected={shown}
+          note={notes[shown.date]}
+          pinned={!!selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
       {noteDate && <NoteEditor date={noteDate} initial={notes[noteDate] ?? ""} onClose={() => setNoteDate(null)} />}
     </SafeAreaView>
     </ScreenContainer>
@@ -213,7 +227,7 @@ function Summary({ value, label }: { value: string; label: string }) {
   );
 }
 
-function DetailBar({ selected, note, onClose }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; onClose: () => void }) {
+function DetailBar({ selected, note, pinned, onClose }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; pinned: boolean; onClose: () => void }) {
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -232,9 +246,11 @@ function DetailBar({ selected, note, onClose }: { selected: { date: string; hour
           : <Text style={styles.detailEmpty}>Not logged</Text>}
         {note ? <Text style={styles.detailNote} numberOfLines={2}>📝 {note}</Text> : null}
       </View>
-      <TouchableOpacity onPress={onClose} style={styles.detailClose}>
-        <Text style={styles.detailCloseText}>✕</Text>
-      </TouchableOpacity>
+      {pinned && (
+        <TouchableOpacity onPress={onClose} style={styles.detailClose}>
+          <Text style={styles.detailCloseText}>✕</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -280,12 +296,14 @@ const styles = StyleSheet.create({
   headerCell: { flex: 1, alignItems: "center" },
   headerText: { fontSize: 8, color: "#9aa0a6" },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
-  dayLabelCol: { width: 46 },
+  dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
+  dayLabelNote: { backgroundColor: "#fde7c4" }, // a day with a note gets a highlighted date box
   dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
-  noteDot: { fontSize: 8, color: "#1a73e8" },
   dayWeekday: { fontSize: 9, color: "#9aa0a6" },
+  // Ring via boxShadow rather than a border so selecting a cell doesn't resize it
+  // (a border would shrink the box and shift the row's layout).
   cell: { flex: 1, height: 16, marginHorizontal: 0.5, borderRadius: 2 },
-  cellSelected: { borderWidth: 1.5, borderColor: "#111" },
+  cellSelected: { boxShadow: "0 0 0 2px #111" },
 
   detail: { flexDirection: "row", alignItems: "center", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
   detailTitle: { fontSize: 14, fontWeight: "700", color: "#111" },
