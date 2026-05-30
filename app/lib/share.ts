@@ -4,6 +4,7 @@
 // pure builders there stay unit-testable.
 import { Platform, Share } from "react-native";
 import { File, Paths } from "expo-file-system";
+import * as Print from "expo-print";
 
 export async function saveExport(filename: string, mime: string, content: string): Promise<void> {
   if (Platform.OS === "web" && typeof document !== "undefined") {
@@ -24,4 +25,15 @@ export async function saveExport(filename: string, mime: string, content: string
   file.create();
   file.write(content);
   await Share.share(Platform.OS === "ios" ? { url: file.uri } : { message: file.uri, url: file.uri });
+}
+
+/** Render HTML to a PDF. Web opens the print dialog (Save as PDF); native writes a
+ *  PDF file and shares it. */
+export async function printPdf(html: string): Promise<void> {
+  if (Platform.OS === "web") {
+    await Print.printAsync({ html });
+    return;
+  }
+  const { uri } = await Print.printToFileAsync({ html });
+  await Share.share(Platform.OS === "ios" ? { url: uri } : { message: uri, url: uri });
 }

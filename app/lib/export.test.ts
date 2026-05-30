@@ -1,6 +1,6 @@
 // Run: bun test lib/export.test.ts
 import { expect, test } from "bun:test";
-import { buildCsv, buildHtml, type LegendEntry, type YearGridDay } from "./export";
+import { buildCsv, buildHtml, buildPrintHtml, type LegendEntry, type YearGridDay } from "./export";
 import { parseWaydrnCsv } from "./csv";
 
 const LEGEND: LegendEntry[] = [
@@ -40,4 +40,16 @@ test("HTML embeds colored index cells and the legend", () => {
   expect(html).toContain("<title>WAYDRN 2025 - Activities</title>");
   expect(html).toContain("background:#1B5E20"); // activity 3 cell colored
   expect(html).toContain("Sleep"); // legend
+});
+
+test("print HTML renders one page section per GridPage with a page break", () => {
+  const html = buildPrintHtml("WAYDRN 2025", [
+    { heading: "Activities", days: [day("1/1", "Mon", [3])], legend: LEGEND },
+    { heading: "Feelings", days: [day("1/1", "Mon", [4])], legend: LEGEND },
+  ]);
+  // two page sections
+  expect(html.match(/class="page"/g)?.length).toBe(2);
+  expect(html).toContain(">Activities<");
+  expect(html).toContain(">Feelings<");
+  expect(html).toContain("page-break-after:always");
 });

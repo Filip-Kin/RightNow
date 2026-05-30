@@ -43,16 +43,23 @@ export function buildCsv(days: YearGridDay[], legend: LegendEntry[], includeNote
   return lines.join("\n");
 }
 
-/** Standalone HTML doc: colored index grid + legend, styled like the spreadsheet. */
-export function buildHtml(title: string, days: YearGridDay[], legend: LegendEntry[]): string {
-  const colorFor = new Map(legend.map((l) => [l.index, l.color]));
-  const textOn = (hex: string) => {
-    const h = hex.replace(/^#/, "");
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16));
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5 ? "#000" : "#fff";
-  };
+function textOn(hex: string): string {
+  const h = hex.replace(/^#/, "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16));
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5 ? "#000" : "#fff";
+}
+
+export interface GridPage {
+  heading: string;
+  days: YearGridDay[];
+  legend: LegendEntry[];
+}
+
+/** One printable page: heading, legend, colored index grid. */
+function renderGridSection(page: GridPage): string {
+  const colorFor = new Map(page.legend.map((l) => [l.index, l.color]));
   const headCells = HOURS.map((_, h) => `<th>${h}</th>`).join("");
-  const rows = days.map((d) => {
+  const rows = page.days.map((d) => {
     const cells = d.values.map((v) => {
       if (v == null) return `<td class="e"></td>`;
       const bg = colorFor.get(v) ?? "#9e9e9e";
@@ -61,26 +68,39 @@ export function buildHtml(title: string, days: YearGridDay[], legend: LegendEntr
     const note = d.note ? `<td class="note">${d.note.replace(/</g, "&lt;")}</td>` : `<td class="note"></td>`;
     return `<tr><th class="d">${d.mD}<span>${d.weekday}</span></th>${cells}${note}</tr>`;
   }).join("");
-  const legendRows = legend.map((l) =>
+  const legendRows = page.legend.map((l) =>
     `<div class="li"><span class="sw" style="background:${l.color}"></span><b>${l.index}</b> ${l.name.replace(/</g, "&lt;")}</div>`
   ).join("");
+  return `<section class="page">
+    <h1>${page.heading}</h1>
+    <div class="legend">${legendRows}</div>
+    <table><thead><tr><th class="d">DATE</th>${headCells}<th class="note">Notes</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+  </section>`;
+}
+
+/** Standalone HTML doc with one printable page per GridPage (page breaks between). */
+export function buildPrintHtml(title: string, pages: GridPage[]): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
-    body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}
+    @page{size:A4 landscape;margin:8mm}
+    body{font-family:system-ui,-apple-system,sans-serif;margin:0;color:#111}
+    .page{padding:16px;page-break-after:always}
+    .page:last-child{page-break-after:auto}
     h1{font-size:20px}
-    table{border-collapse:collapse;font-size:10px}
-    th,td{width:20px;height:18px;text-align:center;border:1px solid #eceff1}
+    table{border-collapse:collapse;font-size:9px}
+    th,td{width:20px;height:17px;text-align:center;border:1px solid #eceff1}
     th.d{width:46px;text-align:right;padding-right:4px;font-weight:600;color:#3c4043}
     th.d span{display:block;font-weight:400;color:#9aa0a6;font-size:8px}
     td.e{background:#f6f7f8}
     td.note{width:auto;text-align:left;padding:0 6px;color:#3c4043;border:none}
     thead th{color:#9aa0a6;font-weight:600}
-    .legend{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+    .legend{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
     .li{display:flex;align-items:center;gap:6px;font-size:12px}
     .sw{width:14px;height:14px;border-radius:3px;display:inline-block}
-  </style></head><body>
-    <h1>${title}</h1>
-    <div class="legend">${legendRows}</div>
-    <table><thead><tr><th class="d">DATE</th>${headCells}<th class="note">Notes</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-  </body></html>`;
+  </style></head><body>${pages.map(renderGridSection).join("")}</body></html>`;
+}
+
+/** Single-page HTML doc (kept for one-metric use / tests). */
+export function buildHtml(title: string, days: YearGridDay[], legend: LegendEntry[]): string {
+  return buildPrintHtml(title, [{ heading: title, days, legend }]);
 }

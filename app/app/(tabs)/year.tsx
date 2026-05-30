@@ -10,8 +10,8 @@ import { useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
   activityColor, activityName, feelingColors, feelings, getActivity, getActivities, useActivities,
 } from "@/lib/activities";
-import { buildCsv, buildHtml, type LegendEntry, type YearGridDay } from "@/lib/export";
-import { saveExport } from "@/lib/share";
+import { buildCsv, buildPrintHtml, type LegendEntry, type YearGridDay } from "@/lib/export";
+import { printPdf, saveExport } from "@/lib/share";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const EMPTY = "#f0f0f0";
@@ -60,38 +60,39 @@ export default function YearScreen() {
     return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : EMPTY;
   }
 
-  function metricValue(e: LocalEntry | undefined): number | null {
+  function valueFor(e: LocalEntry | undefined, m: Metric): number | null {
     if (!e) return null;
-    return metric === "feeling" ? e.feeling : e.activity;
+    return m === "feeling" ? e.feeling : e.activity;
   }
 
-  function legendEntries(): LegendEntry[] {
-    if (metric === "feeling") {
-      return feelings.map((name, index) => ({ index, name, color: feelingColors[index] }));
-    }
+  function legendFor(m: Metric): LegendEntry[] {
+    if (m === "feeling") return feelings.map((name, index) => ({ index, name, color: feelingColors[index] }));
     return getActivities().map((a) => ({ index: a.index, name: a.name, color: a.color }));
   }
 
-  function gridDays(): YearGridDay[] {
-    return rows.map((r) => ({
-      mD: r.mD,
-      weekday: r.weekday,
-      values: r.hours.map(metricValue),
-      note: r.note,
-    }));
+  function daysFor(m: Metric): YearGridDay[] {
+    return rows.map((r) => ({ mD: r.mD, weekday: r.weekday, values: r.hours.map((e) => valueFor(e, m)), note: r.note }));
   }
 
-  async function doExport(kind: "html" | "csv") {
-    const title = `WAYDRN ${year} - ${metric === "feeling" ? "Feelings" : "Activities"}`;
+  async function exportCsv() {
     const base = `waydrn-${year}-${metric === "feeling" ? "feelings" : "activities"}`;
     try {
-      if (kind === "csv") {
-        await saveExport(`${base}.csv`, "text/csv", buildCsv(gridDays(), legendEntries(), metric === "activity"));
-      } else {
-        await saveExport(`${base}.html`, "text/html", buildHtml(title, gridDays(), legendEntries()));
-      }
+      await saveExport(`${base}.csv`, "text/csv", buildCsv(daysFor(metric), legendFor(metric), metric === "activity"));
     } catch (err) {
-      console.warn("export failed", err);
+      console.warn("csv export failed", err);
+    }
+  }
+
+  // PDF is always the full picture: activities on page 1, feelings on page 2.
+  async function exportPdf() {
+    try {
+      const html = buildPrintHtml(`WAYDRN ${year}`, [
+        { heading: `WAYDRN ${year} - Activities`, days: daysFor("activity"), legend: legendFor("activity") },
+        { heading: `WAYDRN ${year} - Feelings`, days: daysFor("feeling"), legend: legendFor("feeling") },
+      ]);
+      await printPdf(html);
+    } catch (err) {
+      console.warn("pdf export failed", err);
     }
   }
 
@@ -124,10 +125,10 @@ export default function YearScreen() {
             <Text style={styles.modeText}>{metric === "activity" ? "Activity" : "Feeling"}</Text>
           </TouchableOpacity>
           <View style={styles.exportRow}>
-            <TouchableOpacity style={styles.exportBtn} onPress={() => doExport("html")}>
-              <Text style={styles.exportText}>{Platform.OS === "web" ? "Download HTML" : "Export HTML"}</Text>
+            <TouchableOpacity style={styles.exportBtn} onPress={exportPdf}>
+              <Text style={styles.exportText}>PDF</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.exportBtn} onPress={() => doExport("csv")}>
+            <TouchableOpacity style={styles.exportBtn} onPress={exportCsv}>
               <Text style={styles.exportText}>{Platform.OS === "web" ? "Download CSV" : "Export CSV"}</Text>
             </TouchableOpacity>
           </View>
