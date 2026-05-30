@@ -19,6 +19,7 @@ export default function TabLayout() {
     <Tabs screenOptions={{ headerShown: false }}>
       {makeTabItem({ name: "index", title: "Right Now", icon: "home" })}
       {makeTabItem({ name: "history", title: "History", icon: "grid-on" })}
+      {makeTabItem({ name: "insights", title: "Insights", icon: "insights" })}
       {makeTabItem({ name: "settings", title: "Settings", icon: "settings" })}
       {/* In the tab navigator (so the bottom bar stays) but hidden from the bar. */}
       <Tabs.Screen name="log" options={{ href: null }} />
