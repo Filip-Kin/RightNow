@@ -250,11 +250,13 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   timeTextLabel: {
     fontSize: 42,
+    color: c.text,
   },
   label: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 16,
+    color: c.text,
   },
   activityGrid: {
     flexDirection: "row",
@@ -291,6 +293,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     textAlign: "center",
     marginVertical: 10,
     fontSize: 16,
+    color: c.text,
   },
   navRow: {
     flexDirection: "row",

@@ -54,6 +54,12 @@ export function getDEK(): Uint8Array | null {
 }
 
 async function persistSession(token: string, dekBytes: Uint8Array, email: string, userId: string) {
+    // Start every sign-in (login, register, recovery, QR link) from a clean local
+    // slate, so a previous account's entries/notes/activities can never bleed into
+    // the new one. App restart uses restoreSession() (no clear), so this only fires
+    // on a real sign-in. The account's own data reloads via the next sync().
+    await clearStore();
+    await clearTaxonomy();
     setAuthToken(token);
     dek = dekBytes;
     await Promise.all([

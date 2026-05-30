@@ -2,7 +2,7 @@
 // single JSON file, and restore it (e.g. to migrate to a new account). Distinct
 // from "Import data (CSV)", which is the per-year WAYDRN spreadsheet migrator.
 import React, { useState } from "react";
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import { File as FsFile } from "expo-file-system";
@@ -12,6 +12,19 @@ import { getActivities, setActivities, useActivities } from "@/lib/activities";
 import { serializeBackup, parseBackup, backupFilename } from "@/lib/backup";
 import { saveExport } from "@/lib/share";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
+
+/** Cross-platform confirm (RN Alert on native, window.confirm on web). */
+function confirmAsync(title: string, message: string): Promise<boolean> {
+  if (Platform.OS === "web") {
+    return Promise.resolve(typeof window !== "undefined" ? window.confirm(`${title}\n\n${message}`) : true);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: "Restore", style: "destructive", onPress: () => resolve(true) },
+    ]);
+  });
+}
 
 async function readPickedFile(asset: DocumentPicker.DocumentPickerAsset): Promise<string> {
   if (Platform.OS === "web") {
@@ -55,9 +68,16 @@ export default function BackupScreen() {
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: ["application/json", "*/*"], copyToCacheDirectory: true });
       if (res.canceled) return;
-      setBusy(true);
       const text = await readPickedFile(res.assets[0]);
       const parsed = parseBackup(text);
+      if (entries.length > 0) {
+        const ok = await confirmAsync(
+          "Restore over existing data?",
+          `This account already has ${entries.length} logged hour${entries.length === 1 ? "" : "s"}. Restoring replaces your activities with the backup's and merges its ${parsed.entries.length} entries in (newest wins). This can't be undone.`,
+        );
+        if (!ok) return;
+      }
+      setBusy(true);
       if (parsed.activities.length) setActivities(parsed.activities);
       const n = await importEntries(parsed.entries);
       const m = await importNotes(parsed.notes);

@@ -3,15 +3,37 @@ import * as Notifications from "expo-notifications";
 import { NotificationPermissionsStatus } from "expo-notifications";
 import { useEffect, useState } from "react";
 import { requestPermissionsAsync } from "expo-notifications";
-import { AppState } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 
 const DEFAULT_REMINDER_HOUR = 21;
+
+// Without a handler, expo-notifications suppresses notifications while the app is
+// foregrounded - which is exactly when the "test" fires - so they never showed.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+// Android (O+) needs a channel or notifications silently never display.
+async function ensureAndroidChannel() {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "Reminders",
+      importance: Notifications.AndroidImportance.HIGH,
+    });
+  }
+}
 
 /** Schedule (or reschedule) the daily reminder at the given local hour. */
 export async function scheduleDailyReminder(hour: number = DEFAULT_REMINDER_HOUR) {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
+  await ensureAndroidChannel();
 
   await Notifications.cancelAllScheduledNotificationsAsync(); // replace any previous schedule
   await Notifications.scheduleNotificationAsync({
@@ -32,23 +54,32 @@ export async function scheduleDailyReminder(hour: number = DEFAULT_REMINDER_HOUR
   });
 }
 
-/** Fire a one-off notification in 5s, for testing from Settings. */
+/** Fire a one-off notification shortly, for testing from Settings. Requests
+ *  permission if needed and tells the user when it's blocked, so the button can't
+ *  silently do nothing. */
 export async function scheduleTestNotification() {
-  const permission = await Notifications.getPermissionsAsync();
-  if (!permission.granted) return;
+  let permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted && permission.canAskAgain) {
+    permission = await requestPermissionsAsync();
+  }
+  if (!permission.granted) {
+    Alert.alert("Notifications are off", "Enable notifications for RightNow in your device settings to receive reminders.");
+    return;
+  }
+  await ensureAndroidChannel();
 
   await Notifications.scheduleNotificationAsync({
     content: {
       title: "RightNow",
-      body: "How was your day? Tap to fill in your hours.",
+      body: "Test notification - reminders are working. ✅",
       badge: 1,
       data: {},
       interruptionLevel: "active",
     },
-    identifier: "right-now",
+    identifier: "right-now-test",
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: 5,
+      seconds: 2,
     },
   });
 }
