@@ -7,10 +7,14 @@ import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, To
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
+import { setEntry, setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
-  activityName, feelingColors, feelings, getActivity, useActivities,
+  activityName, feelingColors, feelings, getActivity, getContrastingTextColor, useActivities,
 } from "@/lib/activities";
+
+// A field choice in the cell editor: a value, null (clear it), or "keep" (leave
+// each cell's current value untouched - the default for bulk edits).
+type FieldChoice = number | null | "keep";
 
 const RANGES = [7, 30, 90, 365] as const;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -32,15 +36,80 @@ export default function HistoryScreen() {
   const router = useRouter();
   const entries = useEntries();
   const notes = useNotes();
-  useActivities(); // re-render on taxonomy edits (colors/names)
+  const activities = useActivities(); // re-render on taxonomy edits (colors/names)
   const [range, setRange] = useState<number>(30);
   const [mode, setMode] = useState<ColorMode>("activity");
   const [selected, setSelected] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
 
+  // Bulk range selection (rows are indexed newest-first). Tap an anchor cell then
+  // a second cell to span the rectangle between them; a third tap restarts.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selAnchor, setSelAnchor] = useState<{ d: number; h: number } | null>(null);
+  const [selEnd, setSelEnd] = useState<{ d: number; h: number } | null>(null);
+  // The cell editor (single tapped cell, or the bulk selection).
+  const [editor, setEditor] = useState<{ cells: { date: string; hour: number }[]; activity: number | null; feeling: number | null; bulk: boolean; title: string } | null>(null);
+
   // Tap pins a cell (closable); hover (web) just previews. Pinned wins.
   const shown = selected ?? hovered;
+
+  const selRect = useMemo(() => {
+    const end = selEnd ?? selAnchor;
+    if (!selAnchor || !end) return null;
+    return {
+      d0: Math.min(selAnchor.d, end.d), d1: Math.max(selAnchor.d, end.d),
+      h0: Math.min(selAnchor.h, end.h), h1: Math.max(selAnchor.h, end.h),
+    };
+  }, [selAnchor, selEnd]);
+  const inSel = (d: number, h: number) => selRect != null && d >= selRect.d0 && d <= selRect.d1 && h >= selRect.h0 && h <= selRect.h1;
+  const selCount = selRect ? (selRect.d1 - selRect.d0 + 1) * (selRect.h1 - selRect.h0 + 1) : 0;
+
+  function clearSelection() {
+    setSelAnchor(null);
+    setSelEnd(null);
+  }
+  function toggleSelectMode() {
+    setSelectMode((s) => !s);
+    clearSelection();
+    setSelected(null);
+  }
+  function onCellPress(dayIdx: number, item: DayRow, h: number, e?: LocalEntry) {
+    if (!selectMode) { setSelected({ date: item.key, hour: h, entry: e }); return; }
+    if (!selAnchor || selEnd) { setSelAnchor({ d: dayIdx, h }); setSelEnd(null); } // start fresh
+    else setSelEnd({ d: dayIdx, h }); // complete the rectangle
+  }
+  function openBulkEditor() {
+    if (!selRect) return;
+    const cells: { date: string; hour: number }[] = [];
+    for (let d = selRect.d0; d <= selRect.d1; d++) {
+      for (let h = selRect.h0; h <= selRect.h1; h++) cells.push({ date: rows[d].key, hour: h });
+    }
+    setEditor({ cells, activity: null, feeling: null, bulk: true, title: `${cells.length} hour${cells.length === 1 ? "" : "s"}` });
+  }
+  function openSingleEditor(s: { date: string; hour: number; entry?: LocalEntry }) {
+    const [y, mo, d] = s.date.split("-").map(Number);
+    const h12 = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+    setEditor({
+      cells: [{ date: s.date, hour: s.hour }],
+      activity: s.entry?.activity ?? null,
+      feeling: s.entry?.feeling ?? null,
+      bulk: false,
+      title: `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d} · ${h12(s.hour)}`,
+    });
+  }
+  async function applyEditor(act: FieldChoice, feel: FieldChoice) {
+    if (!editor) return;
+    for (const c of editor.cells) {
+      const existing = byDate.get(c.date)?.get(c.hour);
+      const activity = act === "keep" ? (existing?.activity ?? null) : act;
+      const feeling = feel === "keep" ? (existing?.feeling ?? null) : feel;
+      await setEntry(c.date, c.hour, activity, feeling);
+    }
+    setEditor(null);
+    clearSelection();
+    setSelected(null);
+  }
 
   // Pull/merge on open like Home.
   useEffect(() => {
@@ -121,6 +190,9 @@ export default function HistoryScreen() {
           ))}
         </View>
         <View style={styles.controlsRight}>
+          <TouchableOpacity style={[styles.modeBtn, selectMode && styles.modeBtnActive]} onPress={toggleSelectMode}>
+            <Text style={[styles.modeText, selectMode && styles.modeTextActive]}>{selectMode ? "Done" : "Select"}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.modeBtn} onPress={() => router.push("/year")}>
             <Text style={styles.modeText}>Year ▸</Text>
           </TouchableOpacity>
@@ -148,7 +220,7 @@ export default function HistoryScreen() {
         keyExtractor={(r) => r.key}
         initialNumToRender={31}
         windowSize={11}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <View style={styles.dayRow}>
             <TouchableOpacity
               style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
@@ -163,11 +235,12 @@ export default function HistoryScreen() {
                 style={[
                   styles.cell,
                   { backgroundColor: cellColor(e) },
-                  shown?.date === item.key && shown?.hour === h && styles.cellSelected,
+                  !selectMode && shown?.date === item.key && shown?.hour === h && styles.cellSelected,
+                  inSel(index, h) && styles.cellInSel,
                 ]}
-                onPress={() => setSelected({ date: item.key, hour: h, entry: e })}
-                onHoverIn={() => setHovered({ date: item.key, hour: h, entry: e })}
-                onHoverOut={() => setHovered(null)}
+                onPress={() => onCellPress(index, item, h, e)}
+                onHoverIn={() => { if (!selectMode) setHovered({ date: item.key, hour: h, entry: e }); }}
+                onHoverOut={() => { if (!selectMode) setHovered(null); }}
               />
             ))}
           </View>
@@ -175,12 +248,41 @@ export default function HistoryScreen() {
         ListFooterComponent={<Legend mode={mode} />}
       />
 
-      {shown && (
+      {!selectMode && shown && (
         <DetailBar
           selected={shown}
           note={notes[shown.date]}
           pinned={!!selected}
           onClose={() => setSelected(null)}
+          onEdit={selected ? () => openSingleEditor(shown) : undefined}
+        />
+      )}
+      {selectMode && (
+        <View style={styles.selBar}>
+          <Text style={styles.selBarText}>
+            {selRect ? `${selCount} hour${selCount === 1 ? "" : "s"} selected` : "Tap a cell, then another to span a range"}
+          </Text>
+          {selRect && (
+            <View style={styles.selBarActions}>
+              <TouchableOpacity onPress={clearSelection} style={styles.selClear}>
+                <Text style={styles.selClearText}>Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={openBulkEditor} style={styles.selEdit}>
+                <Text style={styles.selEditText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+      {editor && (
+        <CellEditor
+          title={editor.title}
+          bulk={editor.bulk}
+          activities={activities}
+          initialActivity={editor.activity}
+          initialFeeling={editor.feeling}
+          onApply={applyEditor}
+          onClose={() => setEditor(null)}
         />
       )}
       {noteDate && <NoteEditor date={noteDate} initial={notes[noteDate] ?? ""} onClose={() => setNoteDate(null)} />}
@@ -234,7 +336,7 @@ function Summary({ value, label }: { value: string; label: string }) {
   );
 }
 
-function DetailBar({ selected, note, pinned, onClose }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; pinned: boolean; onClose: () => void }) {
+function DetailBar({ selected, note, pinned, onClose, onEdit }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; pinned: boolean; onClose: () => void; onEdit?: () => void }) {
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -253,12 +355,85 @@ function DetailBar({ selected, note, pinned, onClose }: { selected: { date: stri
           : <Text style={styles.detailEmpty}>Not logged</Text>}
         {note ? <Text style={styles.detailNote} numberOfLines={2}>📝 {note}</Text> : null}
       </View>
+      {onEdit && (
+        <TouchableOpacity onPress={onEdit} style={styles.detailEdit}>
+          <Text style={styles.detailEditText}>Edit</Text>
+        </TouchableOpacity>
+      )}
       {pinned && (
         <TouchableOpacity onPress={onClose} style={styles.detailClose}>
           <Text style={styles.detailCloseText}>✕</Text>
         </TouchableOpacity>
       )}
     </View>
+  );
+}
+
+// Activity + feeling picker for one cell or a bulk selection. Each field is a
+// FieldChoice: a value, null ("clear"), or "keep" (leave each cell's current
+// value as-is). Bulk edits default both to "keep" so you can change only one.
+function CellEditor({
+  title, bulk, activities, initialActivity, initialFeeling, onApply, onClose,
+}: {
+  title: string;
+  bulk: boolean;
+  activities: { index: number; name: string; color: string }[];
+  initialActivity: number | null;
+  initialFeeling: number | null;
+  onApply: (activity: FieldChoice, feeling: FieldChoice) => void;
+  onClose: () => void;
+}) {
+  const [act, setAct] = useState<FieldChoice>(bulk ? "keep" : initialActivity);
+  const [feel, setFeel] = useState<FieldChoice>(bulk ? "keep" : initialFeeling);
+
+  const Chip = ({ label, color, active, onPress }: { label: string; color?: string; active: boolean; onPress: () => void }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[
+        styles.chip,
+        color ? { backgroundColor: color } : styles.chipNeutral,
+        active && styles.chipActive,
+      ]}
+    >
+      <Text style={[styles.chipText, color ? { color: getContrastingTextColor(color) } : styles.chipTextNeutral]}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.noteBackdrop}>
+        <View style={styles.noteCard}>
+          <Text style={styles.noteTitle}>Edit · {title}</Text>
+
+          <Text style={styles.editSection}>Activity</Text>
+          <View style={styles.chipWrap}>
+            {bulk && <Chip label="Keep" active={act === "keep"} onPress={() => setAct("keep")} />}
+            {activities.map((a) => (
+              <Chip key={a.index} label={a.name} color={a.color} active={act === a.index} onPress={() => setAct(a.index)} />
+            ))}
+            <Chip label="Clear" active={act === null} onPress={() => setAct(null)} />
+          </View>
+
+          <Text style={styles.editSection}>Feeling</Text>
+          <View style={styles.chipWrap}>
+            {bulk && <Chip label="Keep" active={feel === "keep"} onPress={() => setFeel("keep")} />}
+            {feelings.map((f, i) => (
+              <Chip key={f} label={f} color={feelingColors[i]} active={feel === i} onPress={() => setFeel(i)} />
+            ))}
+            <Chip label="Clear" active={feel === null} onPress={() => setFeel(null)} />
+          </View>
+
+          <View style={styles.noteActions}>
+            <TouchableOpacity style={styles.noteCancel} onPress={onClose}>
+              <Text style={styles.noteCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.noteSave} onPress={() => onApply(act, feel)}>
+              <Text style={styles.noteSaveText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -298,7 +473,9 @@ const styles = StyleSheet.create({
   segText: { fontSize: 13, fontWeight: "600", color: "#3c4043" },
   segTextActive: { color: "#fff" },
   modeBtn: { borderWidth: 1, borderColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
+  modeBtnActive: { backgroundColor: "#1a73e8" },
   modeText: { color: "#1a73e8", fontWeight: "600", fontSize: 13 },
+  modeTextActive: { color: "#fff" },
 
   headerRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "flex-end", marginBottom: 2 },
   headerCell: { flex: 1, alignItems: "center" },
@@ -312,6 +489,7 @@ const styles = StyleSheet.create({
   // (a border would shrink the box and shift the row's layout).
   cell: { flex: 1, height: 16, marginHorizontal: 0.5, borderRadius: 2 },
   cellSelected: { boxShadow: "0 0 0 2px #111" },
+  cellInSel: { boxShadow: "0 0 0 2px #1a73e8" },
 
   detail: { flexDirection: "row", alignItems: "center", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
   detailTitle: { fontSize: 14, fontWeight: "700", color: "#111" },
@@ -320,6 +498,24 @@ const styles = StyleSheet.create({
   detailNote: { fontSize: 13, color: "#3c4043", marginTop: 4 },
   detailClose: { padding: 8 },
   detailCloseText: { fontSize: 16, color: "#5f6368" },
+  detailEdit: { borderWidth: 1, borderColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14, marginRight: 4 },
+  detailEditText: { color: "#1a73e8", fontWeight: "700", fontSize: 13 },
+
+  selBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
+  selBarText: { fontSize: 14, fontWeight: "600", color: "#3c4043", flex: 1 },
+  selBarActions: { flexDirection: "row", gap: 10 },
+  selClear: { paddingVertical: 8, paddingHorizontal: 12 },
+  selClearText: { color: "#5f6368", fontWeight: "600", fontSize: 14 },
+  selEdit: { backgroundColor: "#1a73e8", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
+  selEditText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+
+  editSection: { fontSize: 12, fontWeight: "700", color: "#5f6368", marginTop: 14, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 2, borderColor: "transparent" },
+  chipNeutral: { backgroundColor: "#eceff1" },
+  chipActive: { borderColor: "#111" },
+  chipText: { fontSize: 13, fontWeight: "600" },
+  chipTextNeutral: { color: "#3c4043" },
 
   noteBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
   noteCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20 },
