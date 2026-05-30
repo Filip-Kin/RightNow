@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import {
   MOOD_WEIGHTS, weightedMood, weightedAvgMood, trailingMovingAverage,
   activityDistribution, avgMoodByActivity, byTimeOfDay, bestDays, moodLineSeries,
+  activityByHourOfDay,
 } from "./stats";
 import type { LocalEntry } from "./entries";
 
@@ -60,6 +61,21 @@ test("by time of day buckets per hour", () => {
   expect(r[9].topActivity).toBe(3); // Work most common at 9am
   expect(r[9].mood).toBeCloseTo((4.75 + 4.75 + 1.5) / 3);
   expect(r[0].topActivity).toBeNull();
+});
+
+test("activity by hour of day builds per-activity 24h histograms", () => {
+  const r = activityByHourOfDay([
+    e("2026-1-1", 9, 3, 4), e("2026-1-2", 9, 3, 4), e("2026-1-3", 17, 3, 2),
+    e("2026-1-1", 22, 8, 4),
+  ]);
+  const work = r.find((x) => x.activity === 3)!;
+  expect(work.counts[9]).toBe(2);
+  expect(work.counts[17]).toBe(1);
+  expect(work.counts[0]).toBe(0);
+  expect(work.total).toBe(3);
+  expect(work.max).toBe(2);
+  // sorted by total desc: Work (3) before Leisure (1)
+  expect(r[0].activity).toBe(3);
 });
 
 test("best days ranks by daily weighted mood and carries the row", () => {

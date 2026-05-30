@@ -149,6 +149,36 @@ export function byTimeOfDay(entries: LocalEntry[]): HourOfDayStat[] {
   });
 }
 
+export interface ActivityHourHeat {
+  activity: number;
+  counts: number[]; // 24, how often this activity happened at each hour-of-day
+  total: number;
+  max: number; // peak hour count (for per-row intensity scaling)
+}
+
+/**
+ * For each activity, how often it occurs at every hour of the day (a heatmap).
+ * Rows sorted by total hours desc; `max` lets the UI scale each row's intensity
+ * to its own peak so an activity's daily rhythm is visible regardless of volume.
+ */
+export function activityByHourOfDay(entries: LocalEntry[]): ActivityHourHeat[] {
+  const m = new Map<number, number[]>();
+  for (const e of entries) {
+    if (e.activity == null) continue;
+    let arr = m.get(e.activity);
+    if (!arr) { arr = new Array(24).fill(0); m.set(e.activity, arr); }
+    arr[e.hour] += 1;
+  }
+  const out: ActivityHourHeat[] = [];
+  for (const [activity, counts] of m) {
+    let total = 0, max = 0;
+    for (const n of counts) { total += n; if (n > max) max = n; }
+    out.push({ activity, counts, total, max });
+  }
+  out.sort((a, b) => b.total - a.total);
+  return out;
+}
+
 export interface DayMood {
   date: string; // "YYYY-M-D"
   mood: number; // daily weighted avg

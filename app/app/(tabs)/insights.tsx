@@ -11,7 +11,7 @@ import {
   activityColor, activityName, feelingColors, feelings, getActivity, useActivities,
 } from "@/lib/activities";
 import {
-  MOOD_MAX, activityDistribution, avgMoodByActivity, bestDays, byTimeOfDay,
+  MOOD_MAX, activityByHourOfDay, activityDistribution, avgMoodByActivity, bestDays, byTimeOfDay,
   entriesInRange, moodLineSeries, weightedAvgMood,
 } from "@/lib/stats";
 
@@ -23,6 +23,14 @@ const EMPTY = "#f0f0f0";
 function moodColor(v: number | null): string {
   if (v == null) return EMPTY;
   return feelingColors[Math.max(0, Math.min(5, Math.round(v)))];
+}
+
+/** A hex color at the given alpha, for heatmap intensity. */
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace(/^#/, "");
+  const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
 function dayLabel(date: string): string {
@@ -49,6 +57,7 @@ export default function InsightsScreen() {
       dist: activityDistribution(inRange),
       byActivity: avgMoodByActivity(inRange),
       timeOfDay: byTimeOfDay(inRange),
+      activityHeat: activityByHourOfDay(inRange),
       best: bestDays(inRange, 5),
     };
   }, [entries, range]);
@@ -129,10 +138,29 @@ export default function InsightsScreen() {
                 <Card title="By time of day" subtitle="most common activity / average mood per hour">
                   <HourStrip cells={stats.timeOfDay.map((h) => h.topActivity != null ? activityColor(h.topActivity) : EMPTY)} />
                   <HourStrip cells={stats.timeOfDay.map((h) => moodColor(h.mood))} />
-                  <View style={styles.hourAxis}>
-                    {Array.from({ length: 24 }).map((_, h) => (
-                      <Text key={h} style={styles.hourAxisText}>{h % 3 === 0 ? h : ""}</Text>
-                    ))}
+                  <HourAxis />
+
+                  <Text style={styles.heatCaption}>Each activity by hour</Text>
+                  {stats.activityHeat.map((row) => (
+                    <View key={row.activity} style={styles.heatRow}>
+                      <Text style={styles.heatLabel} numberOfLines={1}>{activityName(row.activity)}</Text>
+                      <View style={[styles.strip, styles.flex1]}>
+                        {row.counts.map((n, h) => (
+                          <View
+                            key={h}
+                            style={[styles.stripCell, { backgroundColor: n === 0 ? EMPTY : hexToRgba(activityColor(row.activity), 0.2 + 0.8 * (n / row.max)) }]}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                  <View style={styles.heatRow}>
+                    <View style={styles.heatLabel} />
+                    <View style={[styles.hourAxis, styles.flex1]}>
+                      {Array.from({ length: 24 }).map((_, h) => (
+                        <Text key={h} style={styles.hourAxisText}>{h % 3 === 0 ? h : ""}</Text>
+                      ))}
+                    </View>
                   </View>
                 </Card>
 
@@ -182,6 +210,16 @@ function HourStrip({ cells }: { cells: string[] }) {
   return (
     <View style={styles.strip}>
       {cells.map((c, i) => <View key={i} style={[styles.stripCell, { backgroundColor: c }]} />)}
+    </View>
+  );
+}
+
+function HourAxis() {
+  return (
+    <View style={styles.hourAxis}>
+      {Array.from({ length: 24 }).map((_, h) => (
+        <Text key={h} style={styles.hourAxisText}>{h % 3 === 0 ? h : ""}</Text>
+      ))}
     </View>
   );
 }
@@ -255,6 +293,11 @@ const styles = StyleSheet.create({
   stripCell: { flex: 1, height: 16, borderRadius: 2 },
   hourAxis: { flexDirection: "row", marginTop: 2 },
   hourAxisText: { flex: 1, fontSize: 8, color: "#9aa0a6", textAlign: "center" },
+
+  heatCaption: { fontSize: 12, fontWeight: "700", color: "#5f6368", marginTop: 16, marginBottom: 8 },
+  heatRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  heatLabel: { width: 70, fontSize: 10, color: "#5f6368" },
+  flex1: { flex: 1 },
 
   bestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
   bestDate: { width: 84, fontSize: 13, fontWeight: "600", color: "#3c4043" },
