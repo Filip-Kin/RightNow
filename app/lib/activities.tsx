@@ -22,6 +22,9 @@ export interface ActivityDef {
   name: string;
   color: string;
   icon: IconName;
+  // When true, selecting this activity in the log flow submits immediately with no
+  // feeling (e.g. Sleep — you can't rate how you felt while asleep).
+  skipFeeling?: boolean;
 }
 
 interface TaxonomyConfig {
@@ -31,7 +34,7 @@ interface TaxonomyConfig {
 }
 
 export const DEFAULT_ACTIVITIES: ActivityDef[] = [
-  { index: 0, name: "Sleep", color: "#273036", icon: "bed" },
+  { index: 0, name: "Sleep", color: "#273036", icon: "bed", skipFeeling: true },
   { index: 1, name: "Dating", color: "#C61533", icon: "favorite" },
   { index: 2, name: "Friends", color: "#005744", icon: "person" },
   { index: 3, name: "Work", color: "#1B5E20", icon: "work" },

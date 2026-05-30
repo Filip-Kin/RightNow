@@ -85,15 +85,25 @@ export default function Index() {
   const slotTime = new Date(y, mo - 1, d, slot.hour);
   const isLast = unlogged.length === 1;
 
-  const handleContinue = () => {
+  // Record the current slot. The store update removes it from `unlogged`, so the
+  // screen advances to the next slot (and we reset the selection).
+  const submit = (activityIndex: number | null, feeling: number | null) => {
     // Encrypt locally and push to the server (optimistic; offline-safe).
-    setEntry(slot.date, slot.hour, selectedActivity, selectedFeeling, "manual").catch((e) => {
+    setEntry(slot.date, slot.hour, activityIndex, feeling, "manual").catch((e) => {
       console.error(e);
       alert(String(e));
     });
     setSelectedActivity(null);
     setSelectedFeeling(-1);
-    // The store update removes this slot from `unlogged`, advancing to the next.
+  };
+
+  const handleContinue = () => submit(selectedActivity, selectedFeeling);
+
+  // Tapping an activity: a "skip feeling" activity (e.g. Sleep) submits immediately
+  // with no feeling; otherwise it just selects, awaiting a feeling + Next.
+  const handleActivityPress = (activity: { index: number; skipFeeling?: boolean }) => {
+    if (activity.skipFeeling) submit(activity.index, null);
+    else setSelectedActivity(activity.index);
   };
 
   return (
@@ -136,7 +146,7 @@ export default function Index() {
                   ? { width: "100%" }
                   : {},
               ]}
-              onPress={() => setSelectedActivity(activity.index)}
+              onPress={() => handleActivityPress(activity)}
             >
               <Icon
                 style={{ color: getContrastingTextColor(activity.color) }}

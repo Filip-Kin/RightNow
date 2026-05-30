@@ -4,7 +4,7 @@
 // the index is editable but must stay unique.
 import React, { useMemo, useState } from "react";
 import {
-  Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
@@ -150,6 +150,17 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
               ))}
             </View>
 
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.switchLabel}>Submit on select (no feeling)</Text>
+                <Text style={styles.switchHint}>For activities with no feeling to log, like Sleep.</Text>
+              </View>
+              <Switch
+                value={!!draft.skipFeeling}
+                onValueChange={(v) => onChange({ ...draft, skipFeeling: v })}
+              />
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -213,6 +224,9 @@ const styles = StyleSheet.create({
   colorChoice: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
   iconChoice: { width: 44, height: 44, borderRadius: 8, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#eee", backgroundColor: "#fafafa" },
   choiceSelected: { borderColor: "#1a73e8" },
+  switchRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 20 },
+  switchLabel: { fontSize: 15, fontWeight: "600", color: "#111" },
+  switchHint: { fontSize: 12, color: "#5f6368", marginTop: 2 },
   modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 20 },
   cancelBtn: { paddingVertical: 10, paddingHorizontal: 16 },
   cancelText: { color: "#5f6368", fontSize: 16, fontWeight: "600" },
