@@ -6,7 +6,7 @@ import React, { useMemo, useState } from "react";
 import { FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { useEntries, type LocalEntry } from "@/lib/entries";
+import { useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
   activityColor, activityName, feelingColors, feelings, getActivity, getActivities, useActivities,
 } from "@/lib/activities";
@@ -19,6 +19,7 @@ type Metric = "activity" | "feeling";
 
 export default function YearScreen() {
   const entries = useEntries();
+  const notes = useNotes();
   useActivities();
   const thisYear = new Date().getFullYear();
   const [year, setYear] = useState(thisYear);
@@ -40,18 +41,18 @@ export default function YearScreen() {
 
   // One row per day of the selected year.
   const rows = useMemo(() => {
-    const out: { key: string; mD: string; weekday: string; hours: (LocalEntry | undefined)[] }[] = [];
+    const out: { key: string; mD: string; weekday: string; hours: (LocalEntry | undefined)[]; note?: string }[] = [];
     const d = new Date(year, 0, 1);
     while (d.getFullYear() === year) {
       const key = `${year}-${d.getMonth() + 1}-${d.getDate()}`;
       const hmap = byDate.get(key);
       const hours: (LocalEntry | undefined)[] = [];
       for (let h = 0; h < 24; h++) hours.push(hmap?.get(h));
-      out.push({ key, mD: `${d.getMonth() + 1}/${d.getDate()}`, weekday: WEEKDAYS[d.getDay()], hours });
+      out.push({ key, mD: `${d.getMonth() + 1}/${d.getDate()}`, weekday: WEEKDAYS[d.getDay()], hours, note: notes[key] });
       d.setDate(d.getDate() + 1);
     }
     return out;
-  }, [byDate, year]);
+  }, [byDate, year, notes]);
 
   function cellColor(e: LocalEntry | undefined): string {
     if (!e) return EMPTY;
@@ -76,7 +77,7 @@ export default function YearScreen() {
       mD: r.mD,
       weekday: r.weekday,
       values: r.hours.map(metricValue),
-      note: undefined,
+      note: r.note,
     }));
   }
 
@@ -149,8 +150,10 @@ export default function YearScreen() {
           windowSize={11}
           renderItem={({ item }) => (
             <View style={styles.dayRow}>
-              <View style={styles.dayLabelCol}>
-                <Text style={styles.dayLabel} numberOfLines={1}>{item.mD}</Text>
+              <View style={[styles.dayLabelCol, item.note && styles.dayLabelNote]}>
+                <Text style={styles.dayLabel} numberOfLines={1}>
+                  {item.mD}{item.note ? <Text style={styles.noteDot}> ●</Text> : null}
+                </Text>
                 <Text style={styles.dayWeekday}>{item.weekday}</Text>
               </View>
               {item.hours.map((e, h) => (
@@ -183,7 +186,9 @@ const styles = StyleSheet.create({
   headerCell: { flex: 1, alignItems: "center" },
   headerText: { fontSize: 8, color: "#9aa0a6" },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
-  dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3 },
+  dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
+  dayLabelNote: { backgroundColor: "#ffe082", borderWidth: 1, borderColor: "#f5b800" },
+  noteDot: { fontSize: 7, color: "#b06000" },
   dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
   dayWeekday: { fontSize: 9, color: "#9aa0a6" },
   cell: { flex: 1, height: 14, marginHorizontal: 0.5, borderRadius: 2 },

@@ -7,9 +7,11 @@ import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, To
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { Icon } from "@/components/Icon";
 import { setEntry, setNote, sync, useEntries, useNotes, type LocalEntry } from "@/lib/entries";
 import {
-  activityName, feelingColors, feelings, getActivity, getContrastingTextColor, useActivities,
+  activityName, feelingColors, feelingIcons, feelings, getActivity, getContrastingTextColor,
+  lightenColor, useActivities, type ActivityDef,
 } from "@/lib/activities";
 
 // A field choice in the cell editor: a value, null (clear it), or "keep" (leave
@@ -39,7 +41,6 @@ export default function HistoryScreen() {
   const activities = useActivities(); // re-render on taxonomy edits (colors/names)
   const [range, setRange] = useState<number>(30);
   const [mode, setMode] = useState<ColorMode>("activity");
-  const [selected, setSelected] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
 
@@ -51,8 +52,8 @@ export default function HistoryScreen() {
   // The cell editor (single tapped cell, or the bulk selection).
   const [editor, setEditor] = useState<{ cells: { date: string; hour: number }[]; activity: number | null; feeling: number | null; bulk: boolean; title: string } | null>(null);
 
-  // Tap pins a cell (closable); hover (web) just previews. Pinned wins.
-  const shown = selected ?? hovered;
+  // Hover (web) selects + previews a cell; clicking it opens the editor.
+  const shown = hovered;
 
   const selRect = useMemo(() => {
     const end = selEnd ?? selAnchor;
@@ -72,10 +73,9 @@ export default function HistoryScreen() {
   function toggleSelectMode() {
     setSelectMode((s) => !s);
     clearSelection();
-    setSelected(null);
   }
   function onCellPress(dayIdx: number, item: DayRow, h: number, e?: LocalEntry) {
-    if (!selectMode) { setSelected({ date: item.key, hour: h, entry: e }); return; }
+    if (!selectMode) { openSingleEditor({ date: item.key, hour: h, entry: e }); return; }
     if (!selAnchor || selEnd) { setSelAnchor({ d: dayIdx, h }); setSelEnd(null); } // start fresh
     else setSelEnd({ d: dayIdx, h }); // complete the rectangle
   }
@@ -108,7 +108,6 @@ export default function HistoryScreen() {
     }
     setEditor(null);
     clearSelection();
-    setSelected(null);
   }
 
   // Pull/merge on open like Home.
@@ -226,7 +225,9 @@ export default function HistoryScreen() {
               style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
               onPress={() => setNoteDate(item.key)}
             >
-              <Text style={styles.dayLabel} numberOfLines={1}>{item.label}</Text>
+              <Text style={styles.dayLabel} numberOfLines={1}>
+                {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
+              </Text>
               <Text style={styles.dayWeekday}>{item.weekday}</Text>
             </TouchableOpacity>
             {item.hours.map((e, h) => (
@@ -249,13 +250,7 @@ export default function HistoryScreen() {
       />
 
       {!selectMode && shown && (
-        <DetailBar
-          selected={shown}
-          note={notes[shown.date]}
-          pinned={!!selected}
-          onClose={() => setSelected(null)}
-          onEdit={selected ? () => openSingleEditor(shown) : undefined}
-        />
+        <DetailBar selected={shown} note={notes[shown.date]} />
       )}
       {selectMode && (
         <View style={styles.selBar}>
@@ -336,7 +331,7 @@ function Summary({ value, label }: { value: string; label: string }) {
   );
 }
 
-function DetailBar({ selected, note, pinned, onClose, onEdit }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; pinned: boolean; onClose: () => void; onEdit?: () => void }) {
+function DetailBar({ selected, note }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string }) {
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
@@ -355,29 +350,22 @@ function DetailBar({ selected, note, pinned, onClose, onEdit }: { selected: { da
           : <Text style={styles.detailEmpty}>Not logged</Text>}
         {note ? <Text style={styles.detailNote} numberOfLines={2}>📝 {note}</Text> : null}
       </View>
-      {onEdit && (
-        <TouchableOpacity onPress={onEdit} style={styles.detailEdit}>
-          <Text style={styles.detailEditText}>Edit</Text>
-        </TouchableOpacity>
-      )}
-      {pinned && (
-        <TouchableOpacity onPress={onClose} style={styles.detailClose}>
-          <Text style={styles.detailCloseText}>✕</Text>
-        </TouchableOpacity>
-      )}
+      <Text style={styles.detailHint}>click to edit</Text>
     </View>
   );
 }
 
-// Activity + feeling picker for one cell or a bulk selection. Each field is a
-// FieldChoice: a value, null ("clear"), or "keep" (leave each cell's current
-// value as-is). Bulk edits default both to "keep" so you can change only one.
+// Activity + feeling picker, styled to match the log submission screen. For a
+// single cell it auto-saves once both an activity and a feeling are chosen (or
+// instantly for a skip-feeling activity), like logging. For a bulk selection
+// each field also offers "Keep" (leave each cell's value as-is) + "Clear", and
+// applies on the Apply button. Both fields are a FieldChoice (value | null | "keep").
 function CellEditor({
   title, bulk, activities, initialActivity, initialFeeling, onApply, onClose,
 }: {
   title: string;
   bulk: boolean;
-  activities: { index: number; name: string; color: string }[];
+  activities: ActivityDef[];
   initialActivity: number | null;
   initialFeeling: number | null;
   onApply: (activity: FieldChoice, feeling: FieldChoice) => void;
@@ -386,49 +374,78 @@ function CellEditor({
   const [act, setAct] = useState<FieldChoice>(bulk ? "keep" : initialActivity);
   const [feel, setFeel] = useState<FieldChoice>(bulk ? "keep" : initialFeeling);
 
-  const Chip = ({ label, color, active, onPress }: { label: string; color?: string; active: boolean; onPress: () => void }) => (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[
-        styles.chip,
-        color ? { backgroundColor: color } : styles.chipNeutral,
-        active && styles.chipActive,
-      ]}
-    >
-      <Text style={[styles.chipText, color ? { color: getContrastingTextColor(color) } : styles.chipTextNeutral]}>{label}</Text>
-    </TouchableOpacity>
-  );
+  // Single-cell: mirror the log's auto-submit. Bulk: just stage the choice.
+  function pickActivity(a: ActivityDef) {
+    if (!bulk) {
+      if (a.skipFeeling) return onApply(a.index, null);
+      if (typeof feel === "number") return onApply(a.index, feel);
+    }
+    setAct(a.index);
+  }
+  function pickFeeling(i: number) {
+    if (!bulk && typeof act === "number") return onApply(act, i);
+    setFeel(i);
+  }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.noteBackdrop}>
-        <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>Edit · {title}</Text>
+      <View style={styles.editBackdrop}>
+        <View style={styles.editCard}>
+          <Text style={styles.editTitle}>{title}</Text>
 
-          <Text style={styles.editSection}>Activity</Text>
-          <View style={styles.chipWrap}>
-            {bulk && <Chip label="Keep" active={act === "keep"} onPress={() => setAct("keep")} />}
+          <Text style={styles.editLabel}>Select an Activity:</Text>
+          <View style={styles.activityGrid}>
+            {bulk && (
+              <TouchableOpacity style={[styles.neutralButton, act === "keep" && styles.neutralButtonActive]} onPress={() => setAct("keep")}>
+                <Text style={styles.neutralButtonText}>Keep</Text>
+              </TouchableOpacity>
+            )}
             {activities.map((a) => (
-              <Chip key={a.index} label={a.name} color={a.color} active={act === a.index} onPress={() => setAct(a.index)} />
+              <TouchableOpacity
+                key={a.index}
+                style={[
+                  { backgroundColor: act === a.index ? lightenColor(a.color, 20) : a.color, borderColor: a.color },
+                  styles.activityButton,
+                  act === a.index && styles.activityButtonSelected,
+                ]}
+                onPress={() => pickActivity(a)}
+              >
+                <Icon style={{ color: getContrastingTextColor(a.color) }} name={a.icon} />
+                <Text style={{ color: getContrastingTextColor(a.color) }}>{a.name}</Text>
+              </TouchableOpacity>
             ))}
-            <Chip label="Clear" active={act === null} onPress={() => setAct(null)} />
+            <TouchableOpacity style={[styles.neutralButton, act === null && styles.neutralButtonActive]} onPress={() => setAct(null)}>
+              <Text style={styles.neutralButtonText}>Clear</Text>
+            </TouchableOpacity>
           </View>
 
-          <Text style={styles.editSection}>Feeling</Text>
-          <View style={styles.chipWrap}>
-            {bulk && <Chip label="Keep" active={feel === "keep"} onPress={() => setFeel("keep")} />}
-            {feelings.map((f, i) => (
-              <Chip key={f} label={f} color={feelingColors[i]} active={feel === i} onPress={() => setFeel(i)} />
-            ))}
-            <Chip label="Clear" active={feel === null} onPress={() => setFeel(null)} />
+          <Text style={styles.editLabel}>How are you feeling?</Text>
+          <View style={styles.feelingRow}>
+            {bulk && (
+              <TouchableOpacity style={styles.feelingItem} onPress={() => setFeel("keep")}>
+                <Text style={[styles.feelingKeep, feel === "keep" && styles.feelingKeepActive]}>Keep</Text>
+              </TouchableOpacity>
+            )}
+            {feelings.map((f, i) => {
+              const color = feel === i ? "#007bff" : "#000000";
+              return (
+                <TouchableOpacity key={f} style={styles.feelingItem} onPress={() => pickFeeling(i)}>
+                  <Text style={{ textAlign: "center", color, marginBottom: 2, fontWeight: "500", fontSize: 11 }}>{f}</Text>
+                  {feelingIcons[i]({ color })}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={styles.feelingItem} onPress={() => setFeel(null)}>
+              <Text style={[styles.feelingKeep, feel === null && styles.feelingKeepActive]}>Clear</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.noteActions}>
+          <View style={styles.editActions}>
             <TouchableOpacity style={styles.noteCancel} onPress={onClose}>
               <Text style={styles.noteCancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.noteSave} onPress={() => onApply(act, feel)}>
-              <Text style={styles.noteSaveText}>Apply</Text>
+              <Text style={styles.noteSaveText}>{bulk ? `Apply to ${title}` : "Save"}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -482,7 +499,8 @@ const styles = StyleSheet.create({
   headerText: { fontSize: 8, color: "#9aa0a6" },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
   dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
-  dayLabelNote: { backgroundColor: "#fde7c4" }, // a day with a note gets a highlighted date box
+  dayLabelNote: { backgroundColor: "#ffe082", borderWidth: 1, borderColor: "#f5b800" }, // a day with a note gets a highlighted date box
+  noteDot: { fontSize: 7, color: "#b06000" },
   dayLabel: { fontSize: 11, fontWeight: "600", color: "#3c4043" },
   dayWeekday: { fontSize: 9, color: "#9aa0a6" },
   // Ring via boxShadow rather than a border so selecting a cell doesn't resize it
@@ -496,10 +514,7 @@ const styles = StyleSheet.create({
   detailBody: { fontSize: 14, color: "#3c4043", marginTop: 2 },
   detailEmpty: { fontSize: 14, color: "#9aa0a6", marginTop: 2, fontStyle: "italic" },
   detailNote: { fontSize: 13, color: "#3c4043", marginTop: 4 },
-  detailClose: { padding: 8 },
-  detailCloseText: { fontSize: 16, color: "#5f6368" },
-  detailEdit: { borderWidth: 1, borderColor: "#1a73e8", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14, marginRight: 4 },
-  detailEditText: { color: "#1a73e8", fontWeight: "700", fontSize: 13 },
+  detailHint: { fontSize: 12, color: "#9aa0a6", fontStyle: "italic" },
 
   selBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14, borderTopWidth: 1, borderTopColor: "#e0e0e0", backgroundColor: "#fafafa" },
   selBarText: { fontSize: 14, fontWeight: "600", color: "#3c4043", flex: 1 },
@@ -509,13 +524,22 @@ const styles = StyleSheet.create({
   selEdit: { backgroundColor: "#1a73e8", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
   selEditText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 
-  editSection: { fontSize: 12, fontWeight: "700", color: "#5f6368", marginTop: 14, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 2, borderColor: "transparent" },
-  chipNeutral: { backgroundColor: "#eceff1" },
-  chipActive: { borderColor: "#111" },
-  chipText: { fontSize: 13, fontWeight: "600" },
-  chipTextNeutral: { color: "#3c4043" },
+  // Cell editor, mirroring the log submission screen.
+  editBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 20 },
+  editCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20, maxHeight: "90%" },
+  editTitle: { fontSize: 18, fontWeight: "700", color: "#111", textAlign: "center", marginBottom: 12 },
+  editLabel: { fontSize: 18, fontWeight: "bold", color: "#111", marginBottom: 12 },
+  activityGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 16 },
+  activityButton: { borderWidth: 4, width: "48%", padding: 5, marginBottom: 10, alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 5, flexDirection: "row", height: 56 },
+  activityButtonSelected: { borderColor: "black" },
+  neutralButton: { width: "48%", height: 56, marginBottom: 10, borderRadius: 5, borderWidth: 4, borderColor: "#dadce0", backgroundColor: "#eceff1", alignItems: "center", justifyContent: "center" },
+  neutralButtonActive: { borderColor: "#111" },
+  neutralButtonText: { color: "#3c4043", fontWeight: "600" },
+  feelingRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+  feelingItem: { flex: 1, alignItems: "center", justifyContent: "center" },
+  feelingKeep: { fontSize: 11, color: "#5f6368", fontWeight: "600" },
+  feelingKeepActive: { color: "#007bff" },
+  editActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 4 },
 
   noteBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
   noteCard: { backgroundColor: "#fff", borderRadius: 14, padding: 20 },
