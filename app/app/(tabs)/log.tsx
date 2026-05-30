@@ -6,7 +6,7 @@ import { useConfig } from "@/lib/config";
 import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useRouter } from "expo-router";
-import { setEntry, useStoreLoaded, useUnloggedHours } from "@/lib/entries";
+import { getEntry, setEntry, useStoreLoaded, useUnloggedHours, type HourSlot } from "@/lib/entries";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useActivities } from "@/lib/activities";
 import {
@@ -54,24 +54,32 @@ export default function Index() {
   const config = useConfig();
   const activities = useActivities();
 
-  // Live list of unlogged hour blocks (oldest first). It shrinks as we submit,
-  // so we always render its first slot and dismiss when it's empty.
   const unlogged = useUnloggedHours(config.catchUpWindowHours);
   const storeLoaded = useStoreLoaded();
-  const slot = unlogged[0];
 
-  // Peak length seen this session = the total for the progress bar (the list
-  // starts empty before the store loads, then settles at the real count).
-  const totalRef = useRef(0);
-  if (unlogged.length > totalRef.current) totalRef.current = unlogged.length;
-  const total = totalRef.current;
-  const done = total - unlogged.length;
+  // Snapshot the unlogged queue once the store has loaded so it stays stable as we
+  // submit — that's what lets us step backward/forward through it.
+  const queueRef = useRef<HourSlot[] | null>(null);
+  if (queueRef.current === null && storeLoaded) queueRef.current = unlogged;
+  const queue = queueRef.current ?? [];
+
+  const [cursor, setCursor] = useState(0);
+  const slot = queue[cursor];
 
   const [selectedActivity, setSelectedActivity] = useState<number | null>(null);
   const [selectedFeeling, setSelectedFeeling] = useState(-1);
 
-  // Nothing left to log (caught up, or finished the queue) -> leave the flow.
-  // Wait for the store to load so we don't dismiss before knowing what's unlogged.
+  // Pre-fill from any saved entry when the slot changes, so a revisited slot shows
+  // your previous choice (and tapping a different option re-submits it).
+  useEffect(() => {
+    if (!slot) return;
+    const e = getEntry(slot.date, slot.hour);
+    setSelectedActivity(e?.activity ?? null);
+    setSelectedFeeling(e?.feeling ?? -1);
+  }, [cursor, slot?.date, slot?.hour]);
+
+  // Finished the queue (or nothing to log) -> leave the flow. Wait for the store to
+  // load so we don't dismiss before knowing what's unlogged.
   useEffect(() => {
     if (storeLoaded && !slot) {
       if (router.canDismiss()) router.dismiss();
@@ -83,27 +91,38 @@ export default function Index() {
 
   const [y, mo, d] = slot.date.split("-").map(Number);
   const slotTime = new Date(y, mo - 1, d, slot.hour);
-  const isLast = unlogged.length === 1;
+  const isLast = cursor >= queue.length - 1;
+  const canForward = !isLast && !!getEntry(slot.date, slot.hour); // only when reviewing a saved slot
 
-  // Record the current slot. The store update removes it from `unlogged`, so the
-  // screen advances to the next slot (and we reset the selection).
+  const advance = () => {
+    if (cursor + 1 >= queue.length) {
+      if (router.canDismiss()) router.dismiss();
+      else router.navigate("/");
+    } else {
+      setCursor((c) => c + 1);
+    }
+  };
+
+  // Save the current slot, then move on. The pre-fill effect resets the selection.
   const submit = (activityIndex: number | null, feeling: number | null) => {
-    // Encrypt locally and push to the server (optimistic; offline-safe).
     setEntry(slot.date, slot.hour, activityIndex, feeling, "manual").catch((e) => {
       console.error(e);
       alert(String(e));
     });
-    setSelectedActivity(null);
-    setSelectedFeeling(-1);
+    advance();
   };
 
-  const handleContinue = () => submit(selectedActivity, selectedFeeling);
-
-  // Tapping an activity: a "skip feeling" activity (e.g. Sleep) submits immediately
-  // with no feeling; otherwise it just selects, awaiting a feeling + Next.
+  // Auto-submit: a "skip feeling" activity (e.g. Sleep) submits instantly with no
+  // feeling; any other submits as soon as both an activity and a feeling are chosen.
   const handleActivityPress = (activity: { index: number; skipFeeling?: boolean }) => {
-    if (activity.skipFeeling) submit(activity.index, null);
-    else setSelectedActivity(activity.index);
+    if (activity.skipFeeling) return submit(activity.index, null);
+    if (selectedFeeling >= 0) return submit(activity.index, selectedFeeling);
+    setSelectedActivity(activity.index);
+  };
+
+  const handleFeelingPress = (i: number) => {
+    if (selectedActivity !== null) return submit(selectedActivity, i);
+    setSelectedFeeling(i);
   };
 
   return (
@@ -119,7 +138,25 @@ export default function Index() {
         <Text style={styles.timeTextLabel}>&nbsp;</Text>
         <AnimatedText text={`${slotTime.getDate()}`} />
       </View>
-      <ProgressIndicator current={done} total={total} />
+      <View style={styles.navRow}>
+        <TouchableOpacity
+          style={[styles.navBtn, cursor === 0 && styles.navBtnDisabled]}
+          onPress={() => cursor > 0 && setCursor((c) => c - 1)}
+          disabled={cursor === 0}
+        >
+          <Icon name="arrow-back" style={{ color: cursor === 0 ? "#ccc" : "#1a73e8" }} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <ProgressIndicator current={cursor} total={queue.length} />
+        </View>
+        <TouchableOpacity
+          style={[styles.navBtn, !canForward && styles.navBtnDisabled]}
+          onPress={() => canForward && setCursor((c) => c + 1)}
+          disabled={!canForward}
+        >
+          <Icon name="arrow-forward" style={{ color: canForward ? "#1a73e8" : "#ccc" }} />
+        </TouchableOpacity>
+      </View>
       <View
         style={{
           flex: 1,
@@ -166,9 +203,7 @@ export default function Index() {
               <TouchableOpacity
                 key={index}
                 style={styles.feelingItem}
-                onPress={() => {
-                  setSelectedFeeling(index);
-                }}
+                onPress={() => handleFeelingPress(index)}
               >
                 <Text
                   key={index}
@@ -187,18 +222,9 @@ export default function Index() {
           })}
         </View>
       </View>
-      <TouchableOpacity
-        style={[
-          styles.continueButton,
-          (selectedActivity === null || selectedFeeling === -1) ? { backgroundColor: "#ccc" } : {}
-        ]}
-        onPress={handleContinue}
-        disabled={selectedActivity === null || selectedFeeling === -1}
-      >
-        <Text style={styles.continueButtonText}>
-          {isLast ? "Finish" : "Next Entry"}
-        </Text>
-      </TouchableOpacity>
+      <Text style={styles.hintText}>
+        {isLast ? "Last one — pick to finish" : "Pick an activity and a feeling to save"}
+      </Text>
       <View style={{ height: useSafeAreaInsets().bottom }}></View>
     </View>
     </ScreenContainer>
@@ -263,15 +289,27 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     fontSize: 16,
   },
-  continueButton: {
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 5,
+  navRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
   },
-  continueButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+  navBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eef3fe",
+  },
+  navBtnDisabled: {
+    backgroundColor: "#f5f5f5",
+  },
+  hintText: {
+    textAlign: "center",
+    color: "#9aa0a6",
+    fontSize: 13,
+    paddingVertical: 8,
   },
 });
