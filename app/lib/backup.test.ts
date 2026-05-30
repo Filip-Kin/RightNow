@@ -42,6 +42,6 @@ test("skips malformed entries/notes defensively", () => {
   expect(out.notes).toEqual([{ date: "2026-1-2", note: "ok" }]);
 });
 
-test("backupFilename uses the date", () => {
-  expect(backupFilename("2026-05-30T01:02:03.000Z")).toBe("rightnow-backup-2026-05-30.json");
+test("backupFilename includes date and time", () => {
+  expect(backupFilename("2026-05-30T01:02:03.000Z")).toBe("rightnow-backup-2026-05-30-010203.json");
 });

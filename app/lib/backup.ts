@@ -99,7 +99,10 @@ export function parseBackup(text: string): ParsedBackup {
   return { activities, entries, notes };
 }
 
-/** A filename for a backup download, e.g. rightnow-backup-2026-05-30.json. */
+/** A filename for a backup download, e.g. rightnow-backup-2026-05-30-013045.json
+ *  (date + UTC HHMMSS, so multiple exports in a day don't collide). */
 export function backupFilename(isoDate: string): string {
-  return `rightnow-backup-${isoDate.slice(0, 10)}.json`;
+  const date = isoDate.slice(0, 10); // YYYY-MM-DD
+  const time = isoDate.slice(11, 19).replace(/:/g, ""); // HHMMSS
+  return `rightnow-backup-${date}-${time}.json`;
 }
