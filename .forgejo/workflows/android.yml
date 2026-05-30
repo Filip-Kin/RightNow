@@ -21,11 +21,16 @@ jobs:
           cid=$(docker create "$IMG")
           docker cp "$cid":/RightNow.apk out/RightNow.apk
           docker rm "$cid"
+          docker image rm "$IMG" || true
           ls -la out
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: RightNow-android-arm64
-          path: out/RightNow.apk
-          if-no-files-found: error
+      # Forgejo doesn't support actions/upload-artifact@v4, so publish the APK to a
+      # moving "android-latest" release for a stable phone-download URL. git.filipkin.com
+      # is pinned to the LAN nginx (host /etc/hosts pin isn't inherited by the job).
+      - name: Publish APK to android-latest release
+        run: |
+          set -eu
+          echo "192.168.1.2 git.filipkin.com" >> /etc/hosts
+          command -v curl >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends curl)
+          export PUBLISH_TOKEN="${{ secrets.PUBLISH_TOKEN }}"
+          sh ci/publish-apk.sh
