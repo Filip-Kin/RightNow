@@ -18,7 +18,8 @@
       },
       "package": "com.filipkin.rightnow",
       "permissions": [
-        "android.permission.health.READ_SLEEP"
+        "android.permission.health.READ_SLEEP",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
     },
     "web": {

@@ -2,14 +2,15 @@ import { AnimatedText } from "@/components/AnimatedText";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useTheme } from "@/lib/theme";
 import { useConfig } from "@/lib/config";
-import { sync, useUnloggedHours } from "@/lib/entries";
+import { sync, useUnloggedHours, useStoreLoaded } from "@/lib/entries";
 import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
 } from "@/lib/notification";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { Suspense, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Button,
   Text,
   TouchableOpacity,
@@ -20,18 +21,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function HomeScreen() {
   const router = useRouter();
   const c = useTheme();
+  const config = useConfig();
+  const storeLoaded = useStoreLoaded();
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const needsSetup = !config.deviceSetupDone;
 
   // Pull remote changes (and push anything pending) when the home screen opens. On a
   // fresh sign-in this downloads everything, so report progress to a download screen.
+  // When the device-setup flow is pending it runs the first sync instead, so skip here.
   useEffect(() => {
+    if (needsSetup) return;
     sync((done, total) => setProgress({ done, total }))
       .catch(() => {/* offline: local state still works */})
       .finally(() => setProgress(null));
-  }, []);
+  }, [needsSetup]);
 
-  const config = useConfig();
   const behindCount = useUnloggedHours(config.catchUpWindowHours).length;
+
+  // First sign-in on a device: run the one-time setup/permissions flow.
+  if (needsSetup) return <Redirect href="/setup" />;
 
   // First sign-in pulls a lot; show a download screen instead of a frozen-looking app.
   if (progress && progress.total > 20 && progress.done < progress.total) {
@@ -60,7 +68,19 @@ export default function HomeScreen() {
 
       {/* Center the circle in the remaining space, both axes. */}
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>
-        {behindCount <= 0 ? (
+        {!storeLoaded ? (
+          // Don't flash a bogus "log N entries" before the store has loaded.
+          <View
+            style={{
+              borderWidth: 1, borderColor: c.borderFaint,
+              alignItems: "center", justifyContent: "center",
+              width: "62%", aspectRatio: 1, padding: 20,
+              backgroundColor: c.surface, borderRadius: 9999,
+            }}
+          >
+            <ActivityIndicator color={c.primary} />
+          </View>
+        ) : behindCount <= 0 ? (
           <View
             style={{
               borderWidth: 1, borderColor: c.borderFaint,
