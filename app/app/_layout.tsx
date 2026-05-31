@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import "../global.css";
 import { useEffect } from "react";
 import { AppState } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
 import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
@@ -28,15 +29,17 @@ export default function RootLayout() {
   // Web width is capped per-screen (see components/ScreenContainer) rather than by
   // wrapping the navigator here, which would hide the bottom tab bar.
   return (
-    <Stack screenOptions={{ contentStyle: { backgroundColor: c.bg } }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="welcome" options={{ headerShown: false }} />
-      <Stack.Screen name="auth" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="recovery-code"
-        options={{ presentation: "modal", headerShown: false, gestureEnabled: false }}
-      />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Stack screenOptions={{ contentStyle: { backgroundColor: c.bg } }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="welcome" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="recovery-code"
+          options={{ presentation: "modal", headerShown: false, gestureEnabled: false }}
+        />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+    </GestureHandlerRootView>
   );
 }

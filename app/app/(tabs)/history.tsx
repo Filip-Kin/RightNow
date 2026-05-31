@@ -2,8 +2,9 @@
 // original WAYDRN spreadsheet. Each cell is filled with the activity's color for
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -19,7 +20,6 @@ import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 // each cell's current value untouched - the default for bulk edits).
 type FieldChoice = number | null | "keep";
 
-const RANGES = [7, 30, 90, 365] as const;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 type ColorMode = "activity" | "feeling";
 
@@ -31,6 +31,7 @@ interface DayRow {
   key: string;
   label: string; // "M/D"
   weekday: string;
+  year: number;
   hours: (LocalEntry | undefined)[]; // 24
 }
 
@@ -41,18 +42,35 @@ export default function HistoryScreen() {
   const entries = useEntries();
   const notes = useNotes();
   const activities = useActivities(); // re-render on taxonomy edits (colors/names)
-  const [range, setRange] = useState<number>(30);
+  const [now] = useState(() => Date.now());
   const [mode, setMode] = useState<ColorMode>("activity");
-  // Grid zoom: bigger cells = easier touch targets. zoom 1 fits the screen width;
-  // higher zooms make the grid wider than the screen and scroll horizontally.
+  // Infinite scroll: render the most recent `dayCount` days, append older pages as
+  // you scroll down. Capped at the earliest day that has any data.
+  const DAYS_PER_PAGE = 90;
+  const [dayCount, setDayCount] = useState(DAYS_PER_PAGE);
+  // Grid zoom (pinch): bigger cells = easier touch targets. zoom 1 fits the screen
+  // width; higher zooms make the grid wider than the screen and scroll horizontally.
   const [zoom, setZoom] = useState(1);
   const { width: winW } = useWindowDimensions();
   const LABEL_W = 46;
   const ROW_PAD = 12;
-  const baseCellW = Math.max(7, (winW - LABEL_W - ROW_PAD * 2) / 24);
-  const cellW = baseCellW * zoom;
+  const GAP = 0.5 * zoom; // per-side cell margin, scaled so the gridlines persist when zoomed
+  const cellW = Math.max(7, (winW - LABEL_W - ROW_PAD * 2) / 24) * zoom; // column width incl. gap
   const cellH = 16 * zoom;
   const gridW = ROW_PAD * 2 + LABEL_W + cellW * 24;
+
+  const pinchStart = useRef(1);
+  const pinch = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onBegin(() => { pinchStart.current = zoom; })
+        .onUpdate((e) => {
+          const z = Math.min(4, Math.max(1, pinchStart.current * e.scale));
+          setZoom(Math.round(z * 20) / 20);
+        }),
+    [zoom],
+  );
   const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
 
@@ -163,42 +181,34 @@ export default function HistoryScreen() {
     return m;
   }, [entries]);
 
-  // Build the day rows for the selected range (newest first).
+  // The oldest day that has any data; we stop infinite scroll there.
+  const maxDays = useMemo(() => {
+    let earliest = Infinity;
+    for (const e of entries) {
+      const [y, mo, d] = e.date.split("-").map(Number);
+      const t = new Date(y, mo - 1, d).getTime();
+      if (t < earliest) earliest = t;
+    }
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    if (!Number.isFinite(earliest)) return 30;
+    return Math.max(30, Math.floor((todayStart.getTime() - earliest) / 86400000) + 1);
+  }, [entries, now]);
+
+  // Build the day rows newest-first, up to the current page (capped at maxDays).
   const rows = useMemo<DayRow[]>(() => {
     const out: DayRow[] = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    for (let i = 0; i < range; i++) {
+    const today = new Date(now); today.setHours(0, 0, 0, 0);
+    const n = Math.min(dayCount, maxDays);
+    for (let i = 0; i < n; i++) {
       const d = new Date(today.getTime() - i * 86400000);
       const key = dayKey(d);
       const hmap = byDate.get(key);
       const hours: (LocalEntry | undefined)[] = [];
       for (let h = 0; h < 24; h++) hours.push(hmap?.get(h));
-      out.push({ key, label: `${d.getMonth() + 1}/${d.getDate()}`, weekday: WEEKDAYS[d.getDay()], hours });
+      out.push({ key, label: `${d.getMonth() + 1}/${d.getDate()}`, weekday: WEEKDAYS[d.getDay()], year: d.getFullYear(), hours });
     }
     return out;
-  }, [byDate, range]);
-
-  // Summary over the visible range.
-  const summary = useMemo(() => {
-    const keys = new Set(rows.map((r) => r.key));
-    let logged = 0;
-    let feelSum = 0, feelN = 0;
-    const actCount = new Map<number, number>();
-    for (const e of entries) {
-      if (!keys.has(e.date)) continue;
-      logged++;
-      if (e.feeling != null) { feelSum += e.feeling; feelN++; }
-      if (e.activity != null) actCount.set(e.activity, (actCount.get(e.activity) ?? 0) + 1);
-    }
-    let topIdx: number | null = null, topN = 0;
-    for (const [idx, n] of actCount) if (n > topN) { topN = n; topIdx = idx; }
-    return {
-      logged,
-      avgFeeling: feelN ? feelSum / feelN : null,
-      top: topIdx != null ? activityName(topIdx) : null,
-    };
-  }, [entries, rows]);
+  }, [byDate, dayCount, maxDays, now]);
 
   function cellColor(e: LocalEntry | undefined): string {
     if (!e) return c.empty;
@@ -211,29 +221,8 @@ export default function HistoryScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Text style={styles.heading}>History</Text>
 
-      <View style={styles.summaryRow}>
-        <Summary value={String(summary.logged)} label="hours logged" />
-        <Summary value={summary.avgFeeling != null ? summary.avgFeeling.toFixed(1) : "–"} label="avg feeling" />
-        <Summary value={summary.top ?? "–"} label="top activity" />
-      </View>
-
       <View style={styles.controls}>
-        <View style={styles.segment}>
-          {RANGES.map((r) => (
-            <TouchableOpacity key={r} style={[styles.segItem, range === r && styles.segItemActive]} onPress={() => setRange(r)}>
-              <Text style={[styles.segText, range === r && styles.segTextActive]}>{r}d</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
         <View style={styles.controlsRight}>
-          <View style={styles.zoomGroup}>
-            <TouchableOpacity style={[styles.zoomBtn, zoom <= 1 && styles.zoomBtnDisabled]} disabled={zoom <= 1} onPress={() => setZoom((z) => Math.max(1, Math.round((z - 0.5) * 2) / 2))}>
-              <Text style={styles.zoomText}>−</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.zoomBtn, zoom >= 4 && styles.zoomBtnDisabled]} disabled={zoom >= 4} onPress={() => setZoom((z) => Math.min(4, Math.round((z + 0.5) * 2) / 2))}>
-              <Text style={styles.zoomText}>+</Text>
-            </TouchableOpacity>
-          </View>
           <TouchableOpacity style={[styles.modeBtn, selectMode && styles.modeBtnActive]} onPress={toggleSelectMode}>
             <Text style={[styles.modeText, selectMode && styles.modeTextActive]}>{selectMode ? "Done" : "Select"}</Text>
           </TouchableOpacity>
@@ -249,56 +238,72 @@ export default function HistoryScreen() {
         </View>
       </View>
 
-      {/* Horizontal scroll so the grid can zoom wider than the screen; the header
-          and rows share the same fixed widths so columns stay aligned. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={zoom > 1} bounces={false}>
-        <View style={{ width: gridW, flex: 1 }}>
-          <View style={[styles.headerRow, { width: gridW }]}>
-            <View style={styles.dayLabelCol} />
-            {Array.from({ length: 24 }).map((_, h) => (
-              <View key={h} style={[styles.headerCell, { width: cellW }]}>
-                <Text style={styles.headerText}>{h % 3 === 0 ? h : ""}</Text>
-              </View>
-            ))}
-          </View>
+      {/* Pinch to zoom; horizontal scroll when the grid is wider than the screen.
+          The header and rows share fixed widths so columns stay aligned. The list
+          scrolls back through history, appending older pages (year headers mark the
+          boundaries). */}
+      <GestureDetector gesture={pinch}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={zoom > 1} bounces={false}>
+          <View style={{ width: gridW, flex: 1 }}>
+            <View style={[styles.headerRow, { width: gridW }]}>
+              <View style={styles.dayLabelCol} />
+              {Array.from({ length: 24 }).map((_, h) => (
+                <View key={h} style={[styles.headerCell, { width: cellW }]}>
+                  <Text style={styles.headerText}>{h % 3 === 0 ? h : ""}</Text>
+                </View>
+              ))}
+            </View>
 
-          <FlatList
-            data={rows}
-            keyExtractor={(r) => r.key}
-            initialNumToRender={31}
-            windowSize={11}
-            style={{ width: gridW }}
-            renderItem={({ item, index }) => (
-              <View style={[styles.dayRow, { width: gridW }]}>
-                <TouchableOpacity
-                  style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
-                  onPress={() => setNoteDate(item.key)}
-                >
-                  <Text style={styles.dayLabel} numberOfLines={1}>
-                    {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
-                  </Text>
-                  <Text style={styles.dayWeekday}>{item.weekday}</Text>
-                </TouchableOpacity>
-                {item.hours.map((e, h) => (
-                  <Pressable
-                    key={h}
-                    style={[
-                      styles.cell,
-                      { backgroundColor: cellColor(e), width: cellW, height: cellH, marginHorizontal: 0 },
-                      !selectMode && shown?.date === item.key && shown?.hour === h && styles.cellSelected,
-                      inSel(index, h) && styles.cellInSel,
-                    ]}
-                    onPress={() => onCellPress(index, item, h, e)}
-                    onHoverIn={() => { if (!selectMode) setHovered({ date: item.key, hour: h, entry: e }); }}
-                    onHoverOut={() => { if (!selectMode) setHovered(null); }}
-                  />
-                ))}
-              </View>
-            )}
-            ListFooterComponent={<Legend mode={mode} />}
-          />
-        </View>
-      </ScrollView>
+            <FlatList
+              data={rows}
+              keyExtractor={(r) => r.key}
+              initialNumToRender={40}
+              windowSize={11}
+              style={{ width: gridW }}
+              onEndReachedThreshold={1.5}
+              onEndReached={() => setDayCount((n) => Math.min(maxDays, n + DAYS_PER_PAGE))}
+              renderItem={({ item, index }) => {
+                const showYear = index === 0 || rows[index - 1].year !== item.year;
+                return (
+                  <>
+                    {showYear && (
+                      <View style={[styles.yearHeader, { width: gridW }]}>
+                        <Text style={styles.yearHeaderText}>{item.year}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.dayRow, { width: gridW }]}>
+                      <TouchableOpacity
+                        style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
+                        onPress={() => setNoteDate(item.key)}
+                      >
+                        <Text style={styles.dayLabel} numberOfLines={1}>
+                          {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
+                        </Text>
+                        <Text style={styles.dayWeekday}>{item.weekday}</Text>
+                      </TouchableOpacity>
+                      {item.hours.map((e, h) => (
+                        <Pressable
+                          key={h}
+                          style={[
+                            styles.cell,
+                            { backgroundColor: cellColor(e), width: cellW - GAP, height: cellH, marginHorizontal: GAP / 2 },
+                            !selectMode && shown?.date === item.key && shown?.hour === h && styles.cellSelected,
+                            inSel(index, h) && styles.cellInSel,
+                          ]}
+                          onPress={() => onCellPress(index, item, h, e)}
+                          onHoverIn={() => { if (!selectMode) setHovered({ date: item.key, hour: h, entry: e }); }}
+                          onHoverOut={() => { if (!selectMode) setHovered(null); }}
+                        />
+                      ))}
+                    </View>
+                  </>
+                );
+              }}
+              ListFooterComponent={<Legend mode={mode} />}
+            />
+          </View>
+        </ScrollView>
+      </GestureDetector>
 
       {!selectMode && shown && (
         <DetailBar selected={shown} note={notes[shown.date]} />
@@ -379,15 +384,6 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
   );
 }
 
-function Summary({ value, label }: { value: string; label: string }) {
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.summaryItem}>
-      <Text style={styles.summaryValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
-    </View>
-  );
-}
 
 function DetailBar({ selected, note }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string }) {
   const styles = useThemedStyles(makeStyles);
@@ -575,16 +571,8 @@ function Legend({ mode }: { mode: ColorMode }) {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   heading: { fontSize: 28, fontWeight: "800", color: c.text, paddingHorizontal: 16, paddingTop: 4 },
-  summaryRow: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
-  summaryItem: { flex: 1, backgroundColor: c.surface, borderRadius: 10, padding: 12 },
-  summaryValue: { fontSize: 18, fontWeight: "700", color: c.text },
-  summaryLabel: { fontSize: 11, color: c.textMuted, marginTop: 2 },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10, flexWrap: "wrap", gap: 8 },
   controlsRight: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  zoomGroup: { flexDirection: "row", borderWidth: 1, borderColor: c.primary, borderRadius: 8, overflow: "hidden" },
-  zoomBtn: { paddingVertical: 6, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
-  zoomBtnDisabled: { opacity: 0.3 },
-  zoomText: { color: c.primary, fontWeight: "800", fontSize: 16, lineHeight: 18 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden" },
   segItem: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: c.card },
   segItemActive: { backgroundColor: c.primary },
@@ -596,6 +584,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   modeTextActive: { color: c.onPrimary },
 
   headerRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "flex-end", marginBottom: 2 },
+  yearHeader: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 },
+  yearHeaderText: { fontSize: 13, fontWeight: "800", color: c.textMuted, letterSpacing: 1 },
   headerCell: { flex: 1, alignItems: "center" },
   headerText: { fontSize: 8, color: c.textFaint },
   dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
