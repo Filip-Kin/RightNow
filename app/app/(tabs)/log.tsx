@@ -53,6 +53,7 @@ function hourLabel(hour: number, hour24: boolean) {
 export default function Index() {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const config = useConfig();
   const activities = useActivities();
