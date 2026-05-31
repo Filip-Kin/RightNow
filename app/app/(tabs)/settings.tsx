@@ -11,6 +11,7 @@ import { refreshHourlyReminder } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
+import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
@@ -49,6 +50,8 @@ export default function Settings() {
   const [sleepBusy, setSleepBusy] = useState(false);
   const [sleepMsg, setSleepMsg] = useState<string | null>(null);
   const [sleepModal, setSleepModal] = useState(false);
+  const [exportModal, setExportModal] = useState(false);
+  const [exportYearN, setExportYearN] = useState(() => new Date().getFullYear());
   useEffect(() => { isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false)); }, []);
 
   function setReminderHour(next: number) {
@@ -127,6 +130,36 @@ export default function Settings() {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.label}>Reminders</Text>
+      <View style={styles.rowBetween}>
+        <Text style={styles.itemLabel}>Daily reminder</Text>
+        <View style={styles.row}>
+          <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour - 1)}>
+            <Text style={styles.stepperText}>-</Text>
+          </TouchableOpacity>
+          <Text style={styles.reminderValue}>{formatHour(config.reminderHour, config.hour24)}</Text>
+          <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
+            <Text style={styles.stepperText}>+</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      <View style={styles.sleepRow}>
+        <Text style={styles.sleepDesc}>Hourly check-in — a nudge each hour to log the current hour, escalating until you catch up.</Text>
+        <Switch
+          value={config.hourlyReminderEnabled}
+          onValueChange={(v) => { void toggleHourly(v); }}
+          trackColor={{ true: c.primary, false: c.border }}
+        />
+      </View>
+      {hcAvailable ? (
+        <TouchableOpacity style={styles.navItem} onPress={() => setSleepModal(true)}>
+          <Icon name="bedtime" style={{ color: c.textBody }} />
+          <Text style={styles.navText}>Sleep auto-fill</Text>
+          <Text style={styles.navStatus}>{config.healthSleepEnabled ? "On" : "Off"}</Text>
+          <Icon name="chevron-right" style={{ color: c.textFaint }} />
+        </TouchableOpacity>
+      ) : null}
+
       <Text style={styles.label}>Appearance</Text>
       <View style={styles.segment}>
         {THEME_OPTIONS.map((o) => (
@@ -139,46 +172,14 @@ export default function Settings() {
           </TouchableOpacity>
         ))}
       </View>
-
-      <Text style={styles.label}>Time Format</Text>
-      <Button
-        title={config.hour24 ? "24 Hour" : "12 Hour"}
-        onPress={() => {
-          config.hour24 = !config.hour24;
-        }}
-      />
-
-      <Text style={styles.label}>Daily Reminder</Text>
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour - 1)}>
-          <Text style={styles.stepperText}>-</Text>
-        </TouchableOpacity>
-        <Text style={styles.reminderValue}>{formatHour(config.reminderHour, config.hour24)}</Text>
-        <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
-          <Text style={styles.stepperText}>+</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.label}>Hourly check-in</Text>
-      <View style={styles.sleepRow}>
-        <Text style={styles.sleepDesc}>
-          A nudge at the end of each hour to log what you're doing. One notification that updates to "the last N hours" until you catch up.
-        </Text>
+      <View style={[styles.sleepRow, { marginTop: 12 }]}>
+        <Text style={styles.sleepDesc}>24-hour time</Text>
         <Switch
-          value={config.hourlyReminderEnabled}
-          onValueChange={(v) => { void toggleHourly(v); }}
+          value={config.hour24}
+          onValueChange={(v) => { config.hour24 = v; }}
           trackColor={{ true: c.primary, false: c.border }}
         />
       </View>
-
-      {hcAvailable ? (
-        <TouchableOpacity style={styles.navItem} onPress={() => setSleepModal(true)}>
-          <Icon name="bedtime" style={{ color: c.textBody }} />
-          <Text style={styles.navText}>Sleep auto-fill</Text>
-          <Text style={styles.navStatus}>{config.healthSleepEnabled ? "On" : "Off"}</Text>
-          <Icon name="chevron-right" style={{ color: c.textFaint }} />
-        </TouchableOpacity>
-      ) : null}
 
       <Text style={styles.label}>Data</Text>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>
@@ -191,9 +192,21 @@ export default function Settings() {
         <Text style={styles.navText}>Import data (CSV)</Text>
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
+      <TouchableOpacity style={styles.navItem} onPress={() => { setExportYearN(new Date().getFullYear()); setExportModal(true); }}>
+        <Icon name="file-download" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Export a year (PDF / CSV)</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/backup")}>
         <Icon name="backup" style={{ color: c.textBody }} />
         <Text style={styles.navText}>Backup &amp; restore (all data)</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Account &amp; devices</Text>
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/account")}>
+        <Icon name="lock" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Email &amp; password backup</Text>
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/link")}>
@@ -201,19 +214,15 @@ export default function Settings() {
         <Text style={styles.navText}>Link a device</Text>
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
-      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/account")}>
-        <Icon name="lock" style={{ color: c.textBody }} />
-        <Text style={styles.navText}>Email &amp; password backup</Text>
-        <Icon name="chevron-right" style={{ color: c.textFaint }} />
-      </TouchableOpacity>
 
       <View style={styles.spacer} />
-      <Button title={"Send Test Notification"} onPress={() => { scheduleTestNotification(); }} />
-      <Button title={"Reset Settings"} onPress={() => { resetConfig(); }} />
-
       <View style={styles.account}>
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
         <Button title={"Log Out"} color={c.danger} onPress={() => { logout(); }} />
+        <View style={styles.utilRow}>
+          <Button title={"Test notification"} onPress={() => { scheduleTestNotification(); }} />
+          <Button title={"Reset settings"} onPress={() => { resetConfig(); }} />
+        </View>
       </View>
 
       <Modal visible={sleepModal} transparent animationType="fade" onRequestClose={() => setSleepModal(false)}>
@@ -267,6 +276,41 @@ export default function Settings() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={exportModal} transparent animationType="fade" onRequestClose={() => setExportModal(false)}>
+        <View style={styles.sleepBackdrop}>
+          <View style={styles.sleepCard}>
+            <Text style={styles.sleepTitle}>Export a year</Text>
+            <View style={styles.rowBetween}>
+              <Text style={styles.itemLabel}>Year</Text>
+              <View style={styles.row}>
+                <TouchableOpacity style={styles.stepper} onPress={() => setExportYearN((y) => y - 1)}>
+                  <Text style={styles.stepperText}>-</Text>
+                </TouchableOpacity>
+                <Text style={styles.reminderValue}>{exportYearN}</Text>
+                <TouchableOpacity style={styles.stepper} onPress={() => setExportYearN((y) => Math.min(new Date().getFullYear(), y + 1))}>
+                  <Text style={styles.stepperText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <Text style={styles.sleepSub}>PDF has activities (page 1) and feelings (page 2). CSV is one metric and re-imports cleanly.</Text>
+            <View style={styles.exportBtns}>
+              <TouchableOpacity style={styles.syncBtn} onPress={() => { void exportYearPdf(exportYearN); }}>
+                <Text style={styles.syncBtnText}>PDF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.syncBtn} onPress={() => { void exportYearCsv(exportYearN, "activity"); }}>
+                <Text style={styles.syncBtnText}>CSV · activities</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.syncBtn} onPress={() => { void exportYearCsv(exportYearN, "feeling"); }}>
+                <Text style={styles.syncBtnText}>CSV · feelings</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.sleepDone} onPress={() => setExportModal(false)}>
+              <Text style={styles.sleepDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
     </SafeAreaView>
     </ScreenContainer>
@@ -308,6 +352,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   navItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.cardBorder },
   navText: { flex: 1, fontSize: 16, color: c.text },
   navStatus: { fontSize: 14, color: c.textMuted },
+  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  itemLabel: { fontSize: 16, color: c.text },
+  utilRow: { flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 14, flexWrap: "wrap" },
+  exportBtns: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
   sleepBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 24 },
   sleepCard: { backgroundColor: c.card, borderRadius: 14, padding: 20 },
   sleepTitle: { fontSize: 20, fontWeight: "800", color: c.text, marginBottom: 12 },
