@@ -107,9 +107,5 @@ export async function readSleepSessions(
     pageToken = res.pageToken;
   } while (pageToken);
   log("readSleepSessions:", out.length, "sessions");
-  // Raw dump (local time) so we can verify exactly what Health Connect returns.
-  for (const s of out) {
-    log("session:", new Date(s.start).toString(), "->", new Date(s.end).toString());
-  }
   return out;
 }

@@ -3,7 +3,7 @@
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
 import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -43,6 +43,16 @@ export default function HistoryScreen() {
   const activities = useActivities(); // re-render on taxonomy edits (colors/names)
   const [range, setRange] = useState<number>(30);
   const [mode, setMode] = useState<ColorMode>("activity");
+  // Grid zoom: bigger cells = easier touch targets. zoom 1 fits the screen width;
+  // higher zooms make the grid wider than the screen and scroll horizontally.
+  const [zoom, setZoom] = useState(1);
+  const { width: winW } = useWindowDimensions();
+  const LABEL_W = 46;
+  const ROW_PAD = 12;
+  const baseCellW = Math.max(7, (winW - LABEL_W - ROW_PAD * 2) / 24);
+  const cellW = baseCellW * zoom;
+  const cellH = 16 * zoom;
+  const gridW = ROW_PAD * 2 + LABEL_W + cellW * 24;
   const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
 
@@ -216,6 +226,14 @@ export default function HistoryScreen() {
           ))}
         </View>
         <View style={styles.controlsRight}>
+          <View style={styles.zoomGroup}>
+            <TouchableOpacity style={[styles.zoomBtn, zoom <= 1 && styles.zoomBtnDisabled]} disabled={zoom <= 1} onPress={() => setZoom((z) => Math.max(1, Math.round((z - 0.5) * 2) / 2))}>
+              <Text style={styles.zoomText}>−</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.zoomBtn, zoom >= 4 && styles.zoomBtnDisabled]} disabled={zoom >= 4} onPress={() => setZoom((z) => Math.min(4, Math.round((z + 0.5) * 2) / 2))}>
+              <Text style={styles.zoomText}>+</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={[styles.modeBtn, selectMode && styles.modeBtnActive]} onPress={toggleSelectMode}>
             <Text style={[styles.modeText, selectMode && styles.modeTextActive]}>{selectMode ? "Done" : "Select"}</Text>
           </TouchableOpacity>
@@ -231,50 +249,56 @@ export default function HistoryScreen() {
         </View>
       </View>
 
-      {/* Hour header (aligned with the rows below via the same fixed label width + flex cells). */}
-      <View style={styles.headerRow}>
-        <View style={styles.dayLabelCol} />
-        {Array.from({ length: 24 }).map((_, h) => (
-          <View key={h} style={styles.headerCell}>
-            <Text style={styles.headerText}>{h % 3 === 0 ? h : ""}</Text>
-          </View>
-        ))}
-      </View>
-
-      <FlatList
-        data={rows}
-        keyExtractor={(r) => r.key}
-        initialNumToRender={31}
-        windowSize={11}
-        renderItem={({ item, index }) => (
-          <View style={styles.dayRow}>
-            <TouchableOpacity
-              style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
-              onPress={() => setNoteDate(item.key)}
-            >
-              <Text style={styles.dayLabel} numberOfLines={1}>
-                {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
-              </Text>
-              <Text style={styles.dayWeekday}>{item.weekday}</Text>
-            </TouchableOpacity>
-            {item.hours.map((e, h) => (
-              <Pressable
-                key={h}
-                style={[
-                  styles.cell,
-                  { backgroundColor: cellColor(e) },
-                  !selectMode && shown?.date === item.key && shown?.hour === h && styles.cellSelected,
-                  inSel(index, h) && styles.cellInSel,
-                ]}
-                onPress={() => onCellPress(index, item, h, e)}
-                onHoverIn={() => { if (!selectMode) setHovered({ date: item.key, hour: h, entry: e }); }}
-                onHoverOut={() => { if (!selectMode) setHovered(null); }}
-              />
+      {/* Horizontal scroll so the grid can zoom wider than the screen; the header
+          and rows share the same fixed widths so columns stay aligned. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={zoom > 1} bounces={false}>
+        <View style={{ width: gridW, flex: 1 }}>
+          <View style={[styles.headerRow, { width: gridW }]}>
+            <View style={styles.dayLabelCol} />
+            {Array.from({ length: 24 }).map((_, h) => (
+              <View key={h} style={[styles.headerCell, { width: cellW }]}>
+                <Text style={styles.headerText}>{h % 3 === 0 ? h : ""}</Text>
+              </View>
             ))}
           </View>
-        )}
-        ListFooterComponent={<Legend mode={mode} />}
-      />
+
+          <FlatList
+            data={rows}
+            keyExtractor={(r) => r.key}
+            initialNumToRender={31}
+            windowSize={11}
+            style={{ width: gridW }}
+            renderItem={({ item, index }) => (
+              <View style={[styles.dayRow, { width: gridW }]}>
+                <TouchableOpacity
+                  style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
+                  onPress={() => setNoteDate(item.key)}
+                >
+                  <Text style={styles.dayLabel} numberOfLines={1}>
+                    {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
+                  </Text>
+                  <Text style={styles.dayWeekday}>{item.weekday}</Text>
+                </TouchableOpacity>
+                {item.hours.map((e, h) => (
+                  <Pressable
+                    key={h}
+                    style={[
+                      styles.cell,
+                      { backgroundColor: cellColor(e), width: cellW, height: cellH, marginHorizontal: 0 },
+                      !selectMode && shown?.date === item.key && shown?.hour === h && styles.cellSelected,
+                      inSel(index, h) && styles.cellInSel,
+                    ]}
+                    onPress={() => onCellPress(index, item, h, e)}
+                    onHoverIn={() => { if (!selectMode) setHovered({ date: item.key, hour: h, entry: e }); }}
+                    onHoverOut={() => { if (!selectMode) setHovered(null); }}
+                  />
+                ))}
+              </View>
+            )}
+            ListFooterComponent={<Legend mode={mode} />}
+          />
+        </View>
+      </ScrollView>
 
       {!selectMode && shown && (
         <DetailBar selected={shown} note={notes[shown.date]} />
@@ -555,8 +579,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   summaryItem: { flex: 1, backgroundColor: c.surface, borderRadius: 10, padding: 12 },
   summaryValue: { fontSize: 18, fontWeight: "700", color: c.text },
   summaryLabel: { fontSize: 11, color: c.textMuted, marginTop: 2 },
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10 },
-  controlsRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10, flexWrap: "wrap", gap: 8 },
+  controlsRight: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  zoomGroup: { flexDirection: "row", borderWidth: 1, borderColor: c.primary, borderRadius: 8, overflow: "hidden" },
+  zoomBtn: { paddingVertical: 6, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
+  zoomBtnDisabled: { opacity: 0.3 },
+  zoomText: { color: c.primary, fontWeight: "800", fontSize: 16, lineHeight: 18 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden" },
   segItem: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: c.card },
   segItemActive: { backgroundColor: c.primary },
