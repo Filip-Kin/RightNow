@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert } from "react-native";
+import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert, Modal } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
@@ -48,6 +48,7 @@ export default function Settings() {
   const [hcAvailable, setHcAvailable] = useState<boolean | null>(null);
   const [sleepBusy, setSleepBusy] = useState(false);
   const [sleepMsg, setSleepMsg] = useState<string | null>(null);
+  const [sleepModal, setSleepModal] = useState(false);
   useEffect(() => { isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false)); }, []);
 
   function setReminderHour(next: number) {
@@ -171,50 +172,12 @@ export default function Settings() {
       </View>
 
       {hcAvailable ? (
-        <>
-          <Text style={styles.label}>Sleep auto-fill</Text>
-          <View style={styles.sleepRow}>
-            <Text style={styles.sleepDesc}>
-              Mark unlogged hours as sleep using Health Connect. Never overwrites a manual entry.
-            </Text>
-            <Switch
-              value={config.healthSleepEnabled}
-              onValueChange={toggleSleep}
-              trackColor={{ true: c.primary, false: c.border }}
-            />
-          </View>
-          {config.healthSleepEnabled ? (
-            <>
-              <Text style={styles.sleepSub}>Which activity is sleep?</Text>
-              <View style={styles.chipsWrap}>
-                {getActivities().map((a) => {
-                  const active = a.index === config.sleepActivityIndex;
-                  return (
-                    <TouchableOpacity
-                      key={a.index}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => { config.sleepActivityIndex = a.index; setSleepMsg(null); }}
-                    >
-                      <View style={[styles.chipDot, { backgroundColor: activityColor(a.index) }]} />
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{a.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              <View style={styles.sleepActions}>
-                <TouchableOpacity
-                  style={[styles.syncBtn, sleepBusy && styles.disabled]}
-                  disabled={sleepBusy}
-                  onPress={() => { void runSleepSync(); }}
-                >
-                  <Text style={styles.syncBtnText}>Sync sleep now</Text>
-                </TouchableOpacity>
-                {sleepBusy ? <ActivityIndicator color={c.primary} /> : null}
-              </View>
-              {sleepMsg ? <Text style={styles.sleepMsg}>{sleepMsg}</Text> : null}
-            </>
-          ) : null}
-        </>
+        <TouchableOpacity style={styles.navItem} onPress={() => setSleepModal(true)}>
+          <Icon name="bedtime" style={{ color: c.textBody }} />
+          <Text style={styles.navText}>Sleep auto-fill</Text>
+          <Text style={styles.navStatus}>{config.healthSleepEnabled ? "On" : "Off"}</Text>
+          <Icon name="chevron-right" style={{ color: c.textFaint }} />
+        </TouchableOpacity>
       ) : null}
 
       <Text style={styles.label}>Data</Text>
@@ -252,6 +215,58 @@ export default function Settings() {
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
         <Button title={"Log Out"} color={c.danger} onPress={() => { logout(); }} />
       </View>
+
+      <Modal visible={sleepModal} transparent animationType="fade" onRequestClose={() => setSleepModal(false)}>
+        <View style={styles.sleepBackdrop}>
+          <View style={styles.sleepCard}>
+            <Text style={styles.sleepTitle}>Sleep auto-fill</Text>
+            <View style={styles.sleepRow}>
+              <Text style={styles.sleepDesc}>
+                Mark unlogged hours as sleep from Health Connect. Never overwrites a manual entry.
+              </Text>
+              <Switch
+                value={config.healthSleepEnabled}
+                onValueChange={toggleSleep}
+                trackColor={{ true: c.primary, false: c.border }}
+              />
+            </View>
+            {config.healthSleepEnabled ? (
+              <>
+                <Text style={styles.sleepSub}>Which activity is sleep?</Text>
+                <View style={styles.chipsWrap}>
+                  {getActivities().map((a) => {
+                    const active = a.index === config.sleepActivityIndex;
+                    return (
+                      <TouchableOpacity
+                        key={a.index}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => { config.sleepActivityIndex = a.index; setSleepMsg(null); }}
+                      >
+                        <View style={[styles.chipDot, { backgroundColor: activityColor(a.index) }]} />
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{a.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={styles.sleepActions}>
+                  <TouchableOpacity
+                    style={[styles.syncBtn, sleepBusy && styles.disabled]}
+                    disabled={sleepBusy}
+                    onPress={() => { void runSleepSync(); }}
+                  >
+                    <Text style={styles.syncBtnText}>Sync sleep now</Text>
+                  </TouchableOpacity>
+                  {sleepBusy ? <ActivityIndicator color={c.primary} /> : null}
+                </View>
+                {sleepMsg ? <Text style={styles.sleepMsg}>{sleepMsg}</Text> : null}
+              </>
+            ) : null}
+            <TouchableOpacity style={styles.sleepDone} onPress={() => setSleepModal(false)}>
+              <Text style={styles.sleepDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
     </SafeAreaView>
     </ScreenContainer>
@@ -292,6 +307,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   sleepMsg: { fontSize: 13, color: c.textMuted, marginTop: 10 },
   navItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.cardBorder },
   navText: { flex: 1, fontSize: 16, color: c.text },
+  navStatus: { fontSize: 14, color: c.textMuted },
+  sleepBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 24 },
+  sleepCard: { backgroundColor: c.card, borderRadius: 14, padding: 20 },
+  sleepTitle: { fontSize: 20, fontWeight: "800", color: c.text, marginBottom: 12 },
+  sleepDone: { marginTop: 18, alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 18, borderRadius: 8, backgroundColor: c.primary },
+  sleepDoneText: { color: c.onPrimary, fontWeight: "700", fontSize: 15 },
   spacer: { height: 28 },
   account: { marginTop: 28, paddingTop: 24, borderTopWidth: 1, borderTopColor: c.cardBorder },
   accountText: { fontSize: 14, color: c.textMuted, marginBottom: 8 },
