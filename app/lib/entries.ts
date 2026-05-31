@@ -18,6 +18,7 @@ import {
     applyPulledConfig, loadTaxonomy, markTaxonomyClean,
     subscribeTaxonomy, taxonomyDirty, taxonomySealedRecord,
 } from "./activities";
+import { dbLoadAll, dbFlush, dbClearAll, type DbEntry } from "./entryDb";
 
 export interface LocalEntry {
     date: string; // "YYYY-M-D"
@@ -34,9 +35,9 @@ export interface LocalNote {
     updatedAt: number; // epoch ms, logical clock for LWW
 }
 
-const STORE_KEY = "rn_entries";
-const NOTES_KEY = "rn_notes";
-const CURSOR_KEY = "rn_cursor";
+// Legacy AsyncStorage keys (pre-SQLite). Removed on first load to reclaim space;
+// the data is re-pulled from the server into SQLite.
+const LEGACY_KEYS = ["rn_entries", "rn_notes", "rn_cursor"];
 const HOUR_MS = 60 * 60 * 1000;
 
 let store: Record<string, LocalEntry> = {}; // cellId -> entry
@@ -44,6 +45,12 @@ let notes: Record<string, LocalNote> = {}; // date "YYYY-M-D" -> note
 let cursor = 0; // server receivedAt cursor for incremental pull
 const dirty = new Set<string>(); // entry cellIds with un-pushed local changes
 const noteDirty = new Set<string>(); // dates with un-pushed note changes
+// Disk-write queues, drained by persist(). Separate from `dirty`/`noteDirty`
+// (which track server pushes and clear independently): a pulled server change
+// must be written to disk even though it isn't "dirty" to push back.
+const diskEntries = new Set<string>(); // cellIds whose row needs (re)writing
+const diskNotes = new Set<string>(); // dates whose note row needs writing/deleting
+let diskCursor = false; // cursor changed and needs writing
 let loaded = false;
 
 const listeners = new Set<() => void>();
@@ -56,22 +63,50 @@ export function subscribeEntries(fn: () => void): () => void {
     return () => void listeners.delete(fn);
 }
 
+/** Flush queued row changes to SQLite. Drains the disk queues; reads each row's
+ *  current state from the in-memory store so we always write the latest value. */
 async function persist() {
-    await Promise.all([
-        AsyncStorage.setItem(STORE_KEY, JSON.stringify(store)),
-        AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes)),
-        AsyncStorage.setItem(CURSOR_KEY, String(cursor)),
-    ]);
+    if (!diskEntries.size && !diskNotes.size && !diskCursor) return;
+    const eids = [...diskEntries]; diskEntries.clear();
+    const ndates = [...diskNotes]; diskNotes.clear();
+    const cflag = diskCursor; diskCursor = false;
+
+    const entries: DbEntry[] = [];
+    for (const id of eids) {
+        const e = store[id];
+        if (e) entries.push({ cellId: id, date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source, updatedAt: e.updatedAt, deleted: e.deleted });
+    }
+    const noteUpserts: { date: string; text: string; updatedAt: number }[] = [];
+    const noteDeletes: string[] = [];
+    for (const d of ndates) {
+        const n = notes[d];
+        if (n) noteUpserts.push({ date: d, text: n.text, updatedAt: n.updatedAt });
+        else noteDeletes.push(d);
+    }
+    await dbFlush({ entries, notes: noteUpserts, deleteNotes: noteDeletes, cursor: cflag ? cursor : null });
 }
 
 export async function loadStore(): Promise<void> {
     if (loaded) return;
-    const [s, n, c] = await Promise.all([
-        AsyncStorage.getItem(STORE_KEY), AsyncStorage.getItem(NOTES_KEY), AsyncStorage.getItem(CURSOR_KEY), loadTaxonomy(),
-    ]);
-    store = s ? JSON.parse(s) : {};
-    notes = n ? JSON.parse(n) : {};
-    cursor = c ? Number(c) : 0;
+    // Drop the old oversized AsyncStorage blobs (safe even when unreadable -
+    // removeItem deletes by key without reading the value).
+    AsyncStorage.multiRemove(LEGACY_KEYS).catch(() => {});
+    try {
+        const [all] = await Promise.all([dbLoadAll(), loadTaxonomy()]);
+        store = {};
+        for (const e of all.entries) {
+            store[e.cellId] = { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source as "manual" | "health", updatedAt: e.updatedAt, deleted: e.deleted };
+        }
+        notes = {};
+        for (const n of all.notes) notes[n.date] = { text: n.text, updatedAt: n.updatedAt };
+        cursor = all.cursor;
+    } catch (e) {
+        // Don't hang the app if the DB can't open (e.g. a misconfigured web build);
+        // start empty - sync will try to repopulate from the server.
+        store = {};
+        notes = {};
+        cursor = 0;
+    }
     loaded = true;
     emit();
 }
@@ -83,10 +118,11 @@ export async function clearStore(): Promise<void> {
     cursor = 0;
     dirty.clear();
     noteDirty.clear();
+    diskEntries.clear();
+    diskNotes.clear();
+    diskCursor = false;
     loaded = false;
-    await Promise.all([
-        AsyncStorage.removeItem(STORE_KEY), AsyncStorage.removeItem(NOTES_KEY), AsyncStorage.removeItem(CURSOR_KEY),
-    ]);
+    await dbClearAll();
     emit();
 }
 
@@ -138,6 +174,7 @@ export function getNotes(): Record<string, string> {
 export async function setNote(date: string, text: string): Promise<void> {
     notes[date] = { text, updatedAt: Date.now() };
     noteDirty.add(date);
+    diskNotes.add(date);
     emit();
     await persist();
     schedulePush();
@@ -236,6 +273,7 @@ export async function setEntry(
     const id = cellId(dek, date, hour);
     store[id] = { date, hour, activity, feeling, source, updatedAt: Date.now(), deleted: false };
     dirty.add(id);
+    diskEntries.add(id);
     emit();
     await persist();
     schedulePush();
@@ -267,6 +305,7 @@ export async function fillHealthSleep(
       source: "health", updatedAt: slotMs(date, hour), deleted: false,
     };
     dirty.add(id);
+    diskEntries.add(id);
     changed++;
   }
   if (changed) {
@@ -302,6 +341,7 @@ export async function importEntries(
         const updatedAt = Math.max(slotMs(it.date, it.hour), prev?.updatedAt ?? 0);
         store[id] = { date: it.date, hour: it.hour, activity, feeling, source: "manual", updatedAt, deleted: false };
         dirty.add(id);
+        diskEntries.add(id);
     }
     emit();
     await persist();
@@ -320,6 +360,7 @@ export async function importNotes(items: { date: string; note: string }[]): Prom
         const updatedAt = Math.max(slotMs(it.date, 0), notes[it.date]?.updatedAt ?? 0);
         notes[it.date] = { text: it.note, updatedAt };
         noteDirty.add(it.date);
+        diskNotes.add(it.date);
         n++;
     }
     emit();
@@ -475,16 +516,19 @@ export async function sync(onProgress?: (done: number, total: number) => void): 
                 date: p.date, hour: p.hour, activity: p.activity, feeling: p.feeling,
                 source: p.source, updatedAt: r.updatedAt, deleted: r.deleted,
             };
+            diskEntries.add(r.cellId);
             changed = true;
         } else {
             const existing = notes[p.date];
             if (existing && existing.updatedAt >= r.updatedAt) continue;
             if (r.deleted || !p.note) delete notes[p.date];
             else notes[p.date] = { text: p.note, updatedAt: r.updatedAt };
+            diskNotes.add(p.date);
             changed = true;
         }
     }
     cursor = res.cursor;
+    diskCursor = true;
     onProgress?.(total, total);
     if (changed) emit();
     await persist();

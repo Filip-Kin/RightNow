@@ -21,6 +21,15 @@ const CORS: Record<string, string> = {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// expo-sqlite on web (wa-sqlite) uses a worker + SharedArrayBuffer, which the
+// browser only allows on a cross-origin-isolated page. These headers enable that.
+// The whole web app is served same-origin, so require-corp doesn't block our own
+// assets (only would-be cross-origin subresources, of which there are none).
+const ISOLATION = {
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
+};
+
 async function serveStatic(pathname: string): Promise<Response> {
     const rel = pathname === '/' ? '/index.html' : pathname;
     let file = Bun.file(WEB_DIR + rel);
@@ -31,7 +40,7 @@ async function serveStatic(pathname: string): Promise<Response> {
             return new Response('Not found', { status: 404 });
         }
     }
-    return new Response(file);
+    return new Response(file, { headers: ISOLATION });
 }
 
 Bun.serve({
