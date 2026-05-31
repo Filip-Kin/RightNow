@@ -70,29 +70,30 @@ function content(streak: number) {
   };
 }
 
-// The repeating delivery trigger: aligned to the top of the hour on iOS; an
-// inexact hourly interval on Android (doze-friendly, re-aligned whenever the app
-// is opened). Same identifier across reschedules => one tray entry.
-async function scheduleRepeating(streak: number) {
-  await Notifications.cancelScheduledNotificationAsync(HOURLY_ID).catch(() => {});
-  const trigger: Notifications.NotificationTriggerInput =
-    Platform.OS === "ios"
-      ? { type: Notifications.SchedulableTriggerInputTypes.CALENDAR, minute: 0, repeats: true }
-      : { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 3600, repeats: true, channelId: HOURLY_CHANNEL };
-  await Notifications.scheduleNotificationAsync({
-    identifier: HOURLY_ID,
-    content: content(streak),
-    trigger,
-  });
+function nextHourBoundary(now: number): number {
+  const d = new Date(now);
+  d.setMinutes(0, 0, 0);
+  if (d.getTime() <= now) d.setHours(d.getHours() + 1);
+  return d.getTime();
 }
 
-async function present(streak: number) {
+// Schedule the next end-of-hour delivery as a one-shot DATE trigger (same id, so it
+// replaces in the tray instead of stacking). A DATE trigger fires at the given time
+// and - unlike a repeating TIME_INTERVAL on Android, which fires immediately when
+// scheduled - never fires on schedule, so reconciling on every app open no longer
+// spawns a duplicate notification. The background task re-runs this to chain the
+// following hours while the app is closed.
+async function scheduleNext(streak0: number, now: number, cap: number) {
+  await Notifications.cancelScheduledNotificationAsync(HOURLY_ID).catch(() => {});
+  const streak = Math.min(streak0 + 1, cap);
   await Notifications.scheduleNotificationAsync({
     identifier: HOURLY_ID,
     content: content(streak),
-    // immediate; same id replaces the tray entry. A channel-only trigger keeps it
-    // on the MAX-importance channel on Android.
-    trigger: Platform.OS === "android" ? { channelId: HOURLY_CHANNEL } : null,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: nextHourBoundary(now),
+      channelId: HOURLY_CHANNEL,
+    },
   });
 }
 
@@ -113,11 +114,12 @@ if (Platform.OS !== "web") {
     if (!raw) return BackgroundFetch.BackgroundFetchResult.NoData;
     const b: Baseline = JSON.parse(raw);
     if (!b.enabled) return BackgroundFetch.BackgroundFetchResult.NoData;
+    const cap = b.cap ?? DEFAULT_CAP;
     const elapsed = Math.max(0, Math.floor((Date.now() - b.t0) / HOUR_MS));
-    const streak = Math.min(b.streak0 + elapsed, b.cap ?? DEFAULT_CAP);
-    if (streak <= 0) return BackgroundFetch.BackgroundFetchResult.NoData;
+    const streak = Math.min(b.streak0 + elapsed, cap);
     await ensureChannel();
-    await present(streak);
+    // Keep the next-hour delivery scheduled (DATE trigger, never fires immediately).
+    await scheduleNext(streak, Date.now(), cap);
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch {
     return BackgroundFetch.BackgroundFetchResult.Failed;
@@ -184,8 +186,8 @@ export async function refreshHourlyReminder(now: number = Date.now()): Promise<v
     if (streak === 0) {
       await clearDelivered(); // caught up -> remove the current nudge
     }
-    // Schedule the next deliveries with the body they'll have if still ignored.
-    await scheduleRepeating(streak + 1);
+    // Schedule the next end-of-hour delivery (DATE trigger; won't fire now).
+    await scheduleNext(streak, now, cap);
   } finally {
     refreshing = false;
   }

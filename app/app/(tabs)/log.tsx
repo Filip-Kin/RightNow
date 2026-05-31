@@ -90,7 +90,7 @@ export default function Index() {
     }
   }, [slot, storeLoaded]);
 
-  if (!slot) return <View style={styles.modalContent} />;
+  if (!slot) return <View style={[styles.modalContent, { paddingTop: insets.top + 8 }]} />;
 
   const [y, mo, d] = slot.date.split("-").map(Number);
   const slotTime = new Date(y, mo - 1, d, slot.hour);
@@ -130,7 +130,7 @@ export default function Index() {
 
   return (
     <ScreenContainer>
-    <View style={styles.modalContent}>
+    <View style={[styles.modalContent, { paddingTop: insets.top + 8 }]}>
       <View style={styles.timeText}>
         {hourLabel(slot.hour % 24, config.hour24)}
         <Text style={styles.timeTextLabel}>-</Text>

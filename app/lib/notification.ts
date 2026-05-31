@@ -173,25 +173,40 @@ AppState.addEventListener("change", (status) => {
   }
 });
 
+let coldStartHandled = false;
+
 export function useNotificationResponseHandler() {
   const router = useRouter();
   const nav = useNavigation();
 
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const { notification } = response;
+    function open(notification: Notifications.Notification, delay = 0) {
       const id = notification.request.identifier;
       const kind = (notification.request.content.data as { kind?: string })?.kind;
-      if (id === "right-now" || id === "right-now-hourly" || kind === "hourly") {
-      if((nav.getState()?.routes.length ?? 0) === 0) {
-        router.replace("/");
-      }
+      if (id !== "right-now" && id !== "right-now-hourly" && kind !== "hourly") return;
+      // Defer the push so the navigator is mounted (notably on a cold start where
+      // the tap launched the app) - go to the home tab first, then the log screen.
+      setTimeout(() => {
+        if ((nav.getState()?.routes.length ?? 0) === 0) router.replace("/");
         router.push("/log");
-      }
-    });
+      }, delay);
+    }
 
-    return () => {
-      subscription.remove();
-    };
+    // App launched by tapping a notification (cold start). Guarded so it only fires
+    // once per process, and cleared so a later normal reopen doesn't re-trigger.
+    if (!coldStartHandled) {
+      coldStartHandled = true;
+      Notifications.getLastNotificationResponseAsync()
+        .then((resp) => {
+          if (resp) {
+            open(resp.notification, 500);
+            Notifications.clearLastNotificationResponseAsync?.();
+          }
+        })
+        .catch(() => {});
+    }
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => open(response.notification));
+    return () => subscription.remove();
   }, [router]);
 }
