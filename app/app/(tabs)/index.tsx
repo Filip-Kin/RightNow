@@ -12,6 +12,7 @@ import { Suspense, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Button,
+  Image,
   Text,
   TouchableOpacity,
   View,
@@ -62,9 +63,14 @@ export default function HomeScreen() {
         <PermissionAlert />
       </Suspense>
 
-      <Text style={{ fontSize: 32, fontWeight: "bold", textAlign: "center", color: c.text, paddingVertical: 16 }}>
-        RightNow
-      </Text>
+      <View style={{ alignItems: "center", paddingVertical: 16 }}>
+        <Image
+          source={require("../../assets/images/icon-512.png")}
+          style={{ width: 56, height: 56 }}
+          resizeMode="contain"
+          accessibilityLabel="RightNow"
+        />
+      </View>
 
       {/* Center the circle in the remaining space, both axes. */}
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 16 }}>

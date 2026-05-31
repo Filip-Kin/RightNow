@@ -7,20 +7,20 @@ export interface DateRange {
 }
 
 export type PresetKey =
-  | "today" | "yesterday" | "last7" | "last7yest" | "last14" | "last30"
-  | "thisWeek" | "lastWeek" | "thisMonth" | "lastMonth";
+  | "last7" | "last14" | "last30"
+  | "thisWeek" | "lastWeek" | "thisMonth" | "lastMonth"
+  | "thisYear" | "lastYear";
 
 export const PRESETS: { key: PresetKey; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
   { key: "last7", label: "Last 7 Days" },
-  { key: "last7yest", label: "Last 7 Days from Yesterday" },
   { key: "last14", label: "Last 14 Days" },
   { key: "last30", label: "Last 30 Days" },
   { key: "thisWeek", label: "This Week" },
   { key: "lastWeek", label: "Last Week" },
   { key: "thisMonth", label: "This Month" },
   { key: "lastMonth", label: "Last Month" },
+  { key: "thisYear", label: "This Year" },
+  { key: "lastYear", label: "Last Year" },
 ];
 
 function startOfDay(d: Date): number {
@@ -43,10 +43,7 @@ function addDays(d: Date, n: number): Date {
 export function presetRange(key: PresetKey, now: number): DateRange {
   const today = new Date(now);
   switch (key) {
-    case "today": return { startMs: startOfDay(today), endMs: endOfDay(today) };
-    case "yesterday": { const y = addDays(today, -1); return { startMs: startOfDay(y), endMs: endOfDay(y) }; }
     case "last7": return { startMs: startOfDay(addDays(today, -6)), endMs: endOfDay(today) };
-    case "last7yest": return { startMs: startOfDay(addDays(today, -7)), endMs: endOfDay(addDays(today, -1)) };
     case "last14": return { startMs: startOfDay(addDays(today, -13)), endMs: endOfDay(today) };
     case "last30": return { startMs: startOfDay(addDays(today, -29)), endMs: endOfDay(today) };
     case "thisWeek": { const s = addDays(today, -today.getDay()); return { startMs: startOfDay(s), endMs: endOfDay(today) }; }
@@ -55,6 +52,12 @@ export function presetRange(key: PresetKey, now: number): DateRange {
     case "lastMonth": {
       const s = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const e = new Date(today.getFullYear(), today.getMonth(), 0); // last day of prev month
+      return { startMs: startOfDay(s), endMs: endOfDay(e) };
+    }
+    case "thisYear": { const s = new Date(today.getFullYear(), 0, 1); return { startMs: startOfDay(s), endMs: endOfDay(today) }; }
+    case "lastYear": {
+      const s = new Date(today.getFullYear() - 1, 0, 1);
+      const e = new Date(today.getFullYear() - 1, 11, 31);
       return { startMs: startOfDay(s), endMs: endOfDay(e) };
     }
   }

@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "assets/images/icon-512.png",
+        "foregroundImage": "assets/images/icon-foreground.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.filipkin.rightnow",

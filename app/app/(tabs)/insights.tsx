@@ -65,8 +65,10 @@ export default function InsightsScreen() {
     };
   }, [entries, dr]);
 
+  // Measure the chart's own container so its width matches the available space
+  // exactly (it sits inside both the scroll padding and the card padding).
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
-  const chartW = Math.max(0, width - 32); // minus card padding
+  const chartW = Math.max(0, width);
 
   return (
     <ScreenContainer maxWidth={1100}>
@@ -77,7 +79,7 @@ export default function InsightsScreen() {
           <DateRangePicker value={dr} onChange={setDr} now={now} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} onLayout={onLayout}>
+        <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.summaryRow}>
             <Summary value={String(stats.logged)} label="hours logged" />
             <Summary value={stats.avgMood != null ? stats.avgMood.toFixed(2) : "–"} label="avg mood" />
@@ -90,18 +92,20 @@ export default function InsightsScreen() {
               <>
                 {/* Mood line */}
                 <Card title="Mood" subtitle={`weighted, ${stats.series.granularity === "hour" ? "hourly" : "daily"} (3-pt smoothed)`}>
-                  {chartW > 0 && (
-                    <LineChart
-                      points={stats.series.points}
-                      min={0}
-                      max={MOOD_MAX}
-                      width={chartW}
-                      color={c.primary}
-                      fill={c.chartFill}
-                      grid={c.cardBorder}
-                      axis={c.textFaint}
-                    />
-                  )}
+                  <View onLayout={onLayout}>
+                    {chartW > 0 && (
+                      <LineChart
+                        points={stats.series.points}
+                        min={0}
+                        max={MOOD_MAX}
+                        width={chartW}
+                        color={c.primary}
+                        fill={c.chartFill}
+                        grid={c.cardBorder}
+                        axis={c.textFaint}
+                      />
+                    )}
+                  </View>
                   {stats.series.points.length === 0 && <Text style={styles.muted}>No rated hours in this range.</Text>}
                 </Card>
 

@@ -6,7 +6,7 @@ import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notification";
+import { scheduleDailyReminder, cancelDailyReminder, scheduleTestNotification } from "@/lib/notification";
 import { refreshHourlyReminder } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
@@ -97,17 +97,34 @@ export default function Settings() {
     void runSleepSync();
   }
 
-  async function toggleHourly(next: boolean) {
-    if (next) {
+  const reminderMode: "off" | "daily" | "hourly" =
+    config.hourlyReminderEnabled ? "hourly" : config.dailyReminderEnabled ? "daily" : "off";
+
+  async function setReminderMode(m: "off" | "daily" | "hourly") {
+    if (m !== "off") {
       let perm = await Notifications.getPermissionsAsync();
       if (!perm.granted && perm.canAskAgain) perm = await Notifications.requestPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Notifications are off", "Enable notifications for RightNow in your device settings to get the hourly check-in.");
+        Alert.alert("Notifications are off", "Enable notifications for RightNow in your device settings to get reminders.");
         return;
       }
     }
-    config.hourlyReminderEnabled = next;
-    await refreshHourlyReminder();
+    if (m === "daily") {
+      config.hourlyReminderEnabled = false;
+      await refreshHourlyReminder();
+      config.dailyReminderEnabled = true;
+      await scheduleDailyReminder(config.reminderHour);
+    } else if (m === "hourly") {
+      config.dailyReminderEnabled = false;
+      await cancelDailyReminder();
+      config.hourlyReminderEnabled = true;
+      await refreshHourlyReminder();
+    } else {
+      config.dailyReminderEnabled = false;
+      config.hourlyReminderEnabled = false;
+      await cancelDailyReminder();
+      await refreshHourlyReminder();
+    }
   }
 
   return (
@@ -131,26 +148,36 @@ export default function Settings() {
       </View>
 
       <Text style={styles.label}>Reminders</Text>
-      <View style={styles.rowBetween}>
-        <Text style={styles.itemLabel}>Daily reminder</Text>
-        <View style={styles.row}>
-          <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour - 1)}>
-            <Text style={styles.stepperText}>-</Text>
+      <View style={styles.segment}>
+        {([["off", "Off"], ["daily", "Daily"], ["hourly", "Hourly"]] as const).map(([k, lbl]) => (
+          <TouchableOpacity
+            key={k}
+            style={[styles.segItem, reminderMode === k && styles.segItemActive]}
+            onPress={() => { void setReminderMode(k); }}
+          >
+            <Text style={[styles.segText, reminderMode === k && styles.segTextActive]}>{lbl}</Text>
           </TouchableOpacity>
-          <Text style={styles.reminderValue}>{formatHour(config.reminderHour, config.hour24)}</Text>
-          <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
-            <Text style={styles.stepperText}>+</Text>
-          </TouchableOpacity>
+        ))}
+      </View>
+      {reminderMode === "daily" ? (
+        <View style={[styles.rowBetween, { marginTop: 14 }]}>
+          <Text style={styles.itemLabel}>Reminder time</Text>
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour - 1)}>
+              <Text style={styles.stepperText}>-</Text>
+            </TouchableOpacity>
+            <Text style={styles.reminderValue}>{formatHour(config.reminderHour, config.hour24)}</Text>
+            <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
+              <Text style={styles.stepperText}>+</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-      <View style={styles.sleepRow}>
-        <Text style={styles.sleepDesc}>Hourly check-in — a nudge each hour to log the current hour, escalating until you catch up.</Text>
-        <Switch
-          value={config.hourlyReminderEnabled}
-          onValueChange={(v) => { void toggleHourly(v); }}
-          trackColor={{ true: c.primary, false: c.border }}
-        />
-      </View>
+      ) : reminderMode === "hourly" ? (
+        <Text style={[styles.sleepDesc, { marginTop: 12 }]}>A nudge at the end of each hour to log the current hour, escalating to "the last N hours" until you catch up.</Text>
+      ) : (
+        <Text style={[styles.sleepDesc, { marginTop: 12 }]}>No reminders. You can still log anytime.</Text>
+      )}
+
       {hcAvailable ? (
         <TouchableOpacity style={styles.navItem} onPress={() => setSleepModal(true)}>
           <Icon name="bedtime" style={{ color: c.textBody }} />

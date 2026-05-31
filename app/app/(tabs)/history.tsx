@@ -323,7 +323,7 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
             style={styles.noteInput}
             value={text}
             onChangeText={setText}
-            placeholder="e.g. FRC district event, dentist, road trip…"
+            placeholder="e.g. travel, an event, something memorable…"
             multiline
             autoFocus
           />

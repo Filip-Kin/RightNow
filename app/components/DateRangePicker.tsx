@@ -39,6 +39,9 @@ export function DateRangePicker({ value, onChange, now }: { value: DateRange; on
   const cells: (number | null)[] = [];
   for (let i = 0; i < firstWd; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(dayMs(new Date(year, month, d)));
+  // Pad to a fixed 6 rows so the calendar's height (and the nav arrows above it)
+  // doesn't jump as you switch between 4/5/6-week months.
+  while (cells.length < 42) cells.push(null);
   const selLo = start, selHi = end ?? start;
 
   return (
@@ -123,10 +126,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   calRow: { flexDirection: "row" },
   calWd: { flex: 1, textAlign: "center", color: c.textFaint, fontSize: 12, paddingVertical: 4 },
   calGrid: { flexDirection: "row", flexWrap: "wrap" },
-  calCell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: "center", justifyContent: "center" },
+  calCell: { width: `${100 / 7}%`, height: 42, alignItems: "center", justifyContent: "center" },
   calIn: { backgroundColor: c.primarySoft },
   calEnd: { backgroundColor: c.primary, borderRadius: 8 },
-  calDay: { fontSize: 14, color: c.text },
+  calDay: { fontSize: 14, color: c.text, textAlign: "center", textAlignVertical: "center", includeFontPadding: false },
   calDayActive: { color: c.onPrimary, fontWeight: "700" },
   calHint: { textAlign: "center", color: c.textMuted, fontSize: 13, paddingVertical: 10 },
   calActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, padding: 8 },

@@ -6,6 +6,7 @@ import { requestPermissionsAsync } from "expo-notifications";
 import { Alert, AppState, Platform } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 import { setSyncStatusListener } from "./entries";
+import { getConfig } from "./config";
 
 const DEFAULT_REMINDER_HOUR = 21;
 const SYNC_WARN_ID = "right-now-sync-failed";
@@ -54,6 +55,11 @@ export async function scheduleDailyReminder(hour: number = DEFAULT_REMINDER_HOUR
       repeats: true,
     },
   });
+}
+
+/** Cancel the daily reminder (used when switching to hourly / off). */
+export async function cancelDailyReminder() {
+  await Notifications.cancelScheduledNotificationAsync("right-now").catch(() => {});
 }
 
 /** Fire a one-off notification shortly, for testing from Settings. Requests
@@ -121,7 +127,7 @@ function getPermissionStatus() {
     notificationStatePermission = result;
     if (!result.granted && result.canAskAgain) {
       requestNotificationPermissionsAsync();
-    } else if (result.granted) {
+    } else if (result.granted && getConfig()?.dailyReminderEnabled !== false) {
       scheduleDailyReminder();
     }
   });
@@ -151,7 +157,7 @@ export function useNotificationGrantedState(): NotificationPermissionsStatus {
 export async function requestNotificationPermissionsAsync() {
   const result = await requestPermissionsAsync();
   notificationStatePermission = result;
-  if (result.granted) scheduleDailyReminder();
+  if (result.granted && getConfig()?.dailyReminderEnabled !== false) scheduleDailyReminder();
   for (const listener of listeners) {
     listener(result);
   }

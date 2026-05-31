@@ -12,8 +12,20 @@ test("last7 spans 7 inclusive days ending today", () => {
   expect(new Date(r.endMs).getDate()).toBe(28);
 });
 
-test("today is a single day", () => {
-  expect(rangeDays(presetRange("today", now))).toBe(1);
+test("thisYear starts Jan 1 of the current year", () => {
+  const r = presetRange("thisYear", now);
+  expect(new Date(r.startMs).getMonth()).toBe(0);
+  expect(new Date(r.startMs).getDate()).toBe(1);
+  expect(new Date(r.startMs).getFullYear()).toBe(2026);
+});
+
+test("lastYear is the whole previous year", () => {
+  const r = presetRange("lastYear", now);
+  expect(new Date(r.startMs).getFullYear()).toBe(2025);
+  expect(new Date(r.startMs).getMonth()).toBe(0);
+  expect(new Date(r.endMs).getFullYear()).toBe(2025);
+  expect(new Date(r.endMs).getMonth()).toBe(11);
+  expect(new Date(r.endMs).getDate()).toBe(31);
 });
 
 test("thisMonth starts on the 1st", () => {
