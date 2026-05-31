@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "assets/images/icon-foreground.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2d3436"
       },
       "package": "com.filipkin.rightnow",
       "permissions": [
