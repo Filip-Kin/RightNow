@@ -52,6 +52,7 @@
       "expo-background-fetch",
       "react-native-health-connect",
       "./plugins/withHealthConnectQueries",
+      "./plugins/withHealthConnectPermissionDelegate",
       [
         "expo-build-properties",
         {
