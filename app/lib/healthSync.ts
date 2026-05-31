@@ -56,6 +56,9 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
     const sessions = await readSleepSessions(sinceMs, now);
     const slots = sleepHours(sessions);
     const filled = await fillHealthSleep(slots, cfg.sleepActivityIndex);
+    // eslint-disable-next-line no-console
+    console.warn("[health] mapped", slots.length, "sleep hours,", filled, "newly filled;",
+      "sample:", JSON.stringify(slots.slice(0, 24)));
     cfg.lastHealthSyncAt = now;
     return filled;
   })();

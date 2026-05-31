@@ -298,7 +298,7 @@ export default function HistoryScreen() {
       )}
       {editor && (
         <CellEditor
-          key={editor.bulk ? "bulk" : `${editor.cells[0].date}-${editor.cells[0].hour}`}
+          cellKey={editor.bulk ? "bulk" : `${editor.cells[0].date}-${editor.cells[0].hour}`}
           title={editor.title}
           bulk={editor.bulk}
           activities={activities}
@@ -396,9 +396,10 @@ function DetailBar({ selected, note }: { selected: { date: string; hour: number;
 // each field also offers "Keep" (leave each cell's value as-is) + "Clear", and
 // applies on the Apply button. Both fields are a FieldChoice (value | null | "keep").
 function CellEditor({
-  title, bulk, activities, initialActivity, initialFeeling, onApply, onClose,
+  cellKey, title, bulk, activities, initialActivity, initialFeeling, onApply, onClose,
   onSave, onPrev, onNext, canNext,
 }: {
+  cellKey: string;
   title: string;
   bulk: boolean;
   activities: ActivityDef[];
@@ -415,6 +416,13 @@ function CellEditor({
   const styles = useThemedStyles(makeStyles);
   const [act, setAct] = useState<FieldChoice>(bulk ? "keep" : initialActivity);
   const [feel, setFeel] = useState<FieldChoice>(bulk ? "keep" : initialFeeling);
+  // Arrows move to an adjacent cell without remounting the Modal (no fade flicker);
+  // reset the staged selection to the new cell's values when it changes.
+  useEffect(() => {
+    setAct(bulk ? "keep" : initialActivity);
+    setFeel(bulk ? "keep" : initialFeeling);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cellKey]);
 
   // Single-cell: save on each pick but keep the dialog open (so the arrows can
   // step through cells). Bulk: just stage the choice for the Apply button.
