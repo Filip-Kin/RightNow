@@ -10,7 +10,7 @@ import { scheduleDailyReminder, scheduleTestNotification } from "@/lib/notificat
 import { refreshHourlyReminder } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
-import { isHealthAvailable } from "@/lib/health";
+import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
@@ -63,16 +63,21 @@ export default function Settings() {
     setSleepBusy(false);
     if (r.ok) {
       setSleepMsg(r.filled > 0 ? `Filled ${r.filled} sleep hour${r.filled === 1 ? "" : "s"}.` : "No new sleep hours to fill.");
-    } else if (r.reason === "denied") {
-      setSleepMsg("Permission denied. Grant sleep access in Health Connect.");
-      config.healthSleepEnabled = false;
-    } else if (r.reason === "unavailable") {
-      setSleepMsg("Health Connect isn't available on this device.");
-      config.healthSleepEnabled = false;
-    } else {
-      setSleepMsg("Couldn't read sleep data. Try again.");
-      config.healthSleepEnabled = false;
+      return;
     }
+    config.healthSleepEnabled = false;
+    const detail = r.reason === "denied" ? "Sleep access wasn't granted." : (r.reason || "Couldn't read sleep data.");
+    setSleepMsg(detail);
+    // The in-app request can't always surface Health Connect's grant screen
+    // (e.g. once dismissed); offer the system screen so access can be granted there.
+    Alert.alert(
+      "Sleep auto-fill",
+      `${detail}\n\nOpen Health Connect to allow RightNow to read your sleep?`,
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Open Health Connect", onPress: () => { void openHealthSettings(); } },
+      ],
+    );
   }
 
   function toggleSleep(next: boolean) {

@@ -17,7 +17,9 @@ let inFlight: Promise<number> | null = null;
 export interface HealthSyncResult {
   ok: boolean;
   filled: number;
-  reason?: "disabled" | "unavailable" | "denied" | "error";
+  // "disabled"/"denied" are sentinels the UI special-cases; anything else is the
+  // underlying error message, surfaced so a failure is diagnosable on-device.
+  reason?: string;
 }
 
 interface SyncOptions {
@@ -55,8 +57,7 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
     const filled = await run;
     return { ok: true, filled };
   } catch (e) {
-    const reason = (e as Error)?.message;
-    return { ok: false, filled: 0, reason: reason === "unavailable" || reason === "denied" ? reason : "error" };
+    return { ok: false, filled: 0, reason: (e as Error)?.message || "error" };
   } finally {
     inFlight = null;
   }

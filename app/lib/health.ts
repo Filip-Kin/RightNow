@@ -20,6 +20,9 @@ export async function requestSleepPermission(): Promise<boolean> {
   return false;
 }
 
+/** Open the system Health Connect screen (no-op where unavailable). */
+export async function openHealthSettings(): Promise<void> {}
+
 /** Read sleep sessions overlapping [sinceMs, untilMs]. */
 export async function readSleepSessions(
   _sinceMs: number,
