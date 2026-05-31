@@ -53,6 +53,7 @@
       "react-native-health-connect",
       "./plugins/withHealthConnectQueries",
       "./plugins/withHealthConnectPermissionDelegate",
+      "./plugins/withHealthPermissionUsage",
       [
         "expo-build-properties",
         {
