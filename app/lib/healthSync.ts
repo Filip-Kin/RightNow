@@ -8,7 +8,11 @@ import { sleepHours } from "./sleepFill";
 import { fillHealthSleep } from "./entries";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BACKFILL_DAYS = 30; // how far back a sync reads
+const BACKFILL_DAYS = 30; // routine (foreground) sync window
+// A manual sync backfills the whole history so old nights you missed during manual
+// logging get filled too. Far enough back to cover any imported data; Health
+// Connect only returns what it actually has, and fill only touches empty hours.
+const FULL_HISTORY_START_MS = new Date(2015, 0, 1).getTime();
 // Don't hammer Health Connect on every foreground; once an hour is plenty.
 const FOREGROUND_MIN_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -28,6 +32,8 @@ interface SyncOptions {
   // foreground path NEVER prompts (it only reads if already granted), so a
   // background path can't pop a system dialog or trip the permission flow.
   prompt?: boolean;
+  // Backfill the whole history (manual sync) vs. just the recent window (foreground).
+  fullHistory?: boolean;
 }
 
 /**
@@ -46,7 +52,8 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
     if (!(await isHealthAvailable())) throw new Error("unavailable");
     const granted = wantPrompt ? await requestSleepPermission() : await hasSleepPermission();
     if (!granted) throw new Error("denied");
-    const sessions = await readSleepSessions(now - BACKFILL_DAYS * DAY_MS, now);
+    const sinceMs = opts.fullHistory ? FULL_HISTORY_START_MS : now - BACKFILL_DAYS * DAY_MS;
+    const sessions = await readSleepSessions(sinceMs, now);
     const slots = sleepHours(sessions);
     const filled = await fillHealthSleep(slots, cfg.sleepActivityIndex);
     cfg.lastHealthSyncAt = now;

@@ -112,6 +112,31 @@ export default function HistoryScreen() {
     clearSelection();
   }
 
+  // Single-cell: save but keep the dialog open so the arrows can step through cells.
+  async function saveSingle(activity: number | null, feeling: number | null) {
+    if (!editor || editor.bulk) return;
+    const cell = editor.cells[0];
+    await setEntry(cell.date, cell.hour, activity, feeling);
+    setEditor((e) => (e && !e.bulk ? { ...e, activity, feeling } : e));
+  }
+  // Move the single-cell editor to the adjacent hour (wraps across days). Won't
+  // step into a not-yet-elapsed hour.
+  function navEditor(dir: -1 | 1) {
+    if (!editor || editor.bulk) return;
+    const cur = editor.cells[0];
+    const [y, mo, d] = cur.date.split("-").map(Number);
+    const dt = new Date(y, mo - 1, d, cur.hour);
+    dt.setHours(dt.getHours() + dir);
+    if (dt.getTime() > Date.now()) return;
+    const ndate = `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`;
+    openSingleEditor({ date: ndate, hour: dt.getHours(), entry: byDate.get(ndate)?.get(dt.getHours()) });
+  }
+  function canStepNext(cell: { date: string; hour: number }): boolean {
+    const [y, mo, d] = cell.date.split("-").map(Number);
+    const dt = new Date(y, mo - 1, d, cell.hour + 1);
+    return dt.getTime() <= Date.now();
+  }
+
   // Pull/merge on open like Home.
   useEffect(() => {
     sync().catch(() => {/* offline ok */});
@@ -273,6 +298,7 @@ export default function HistoryScreen() {
       )}
       {editor && (
         <CellEditor
+          key={editor.bulk ? "bulk" : `${editor.cells[0].date}-${editor.cells[0].hour}`}
           title={editor.title}
           bulk={editor.bulk}
           activities={activities}
@@ -280,6 +306,10 @@ export default function HistoryScreen() {
           initialFeeling={editor.feeling}
           onApply={applyEditor}
           onClose={() => setEditor(null)}
+          onSave={editor.bulk ? undefined : saveSingle}
+          onPrev={editor.bulk ? undefined : () => navEditor(-1)}
+          onNext={editor.bulk ? undefined : () => navEditor(1)}
+          canNext={editor.bulk ? false : canStepNext(editor.cells[0])}
         />
       )}
       {noteDate && <NoteEditor date={noteDate} initial={notes[noteDate] ?? ""} onClose={() => setNoteDate(null)} />}
@@ -367,6 +397,7 @@ function DetailBar({ selected, note }: { selected: { date: string; hour: number;
 // applies on the Apply button. Both fields are a FieldChoice (value | null | "keep").
 function CellEditor({
   title, bulk, activities, initialActivity, initialFeeling, onApply, onClose,
+  onSave, onPrev, onNext, canNext,
 }: {
   title: string;
   bulk: boolean;
@@ -375,30 +406,47 @@ function CellEditor({
   initialFeeling: number | null;
   onApply: (activity: FieldChoice, feeling: FieldChoice) => void;
   onClose: () => void;
+  onSave?: (activity: number | null, feeling: number | null) => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  canNext?: boolean;
 }) {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [act, setAct] = useState<FieldChoice>(bulk ? "keep" : initialActivity);
   const [feel, setFeel] = useState<FieldChoice>(bulk ? "keep" : initialFeeling);
 
-  // Single-cell: mirror the log's auto-submit. Bulk: just stage the choice.
+  // Single-cell: save on each pick but keep the dialog open (so the arrows can
+  // step through cells). Bulk: just stage the choice for the Apply button.
   function pickActivity(a: ActivityDef) {
-    if (!bulk) {
-      if (a.skipFeeling) return onApply(a.index, null);
-      if (typeof feel === "number") return onApply(a.index, feel);
-    }
+    if (bulk) { setAct(a.index); return; }
     setAct(a.index);
+    if (a.skipFeeling) { setFeel(null); onSave?.(a.index, null); }
+    else if (typeof feel === "number") onSave?.(a.index, feel);
   }
   function pickFeeling(i: number) {
-    if (!bulk && typeof act === "number") return onApply(act, i);
+    if (bulk) { setFeel(i); return; }
     setFeel(i);
+    if (typeof act === "number") onSave?.(act, i);
   }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.editBackdrop}>
         <View style={styles.editCard}>
-          <Text style={styles.editTitle}>{title}</Text>
+          {bulk ? (
+            <Text style={styles.editTitle}>{title}</Text>
+          ) : (
+            <View style={styles.editTitleRow}>
+              <TouchableOpacity style={styles.navArrow} onPress={onPrev}>
+                <Text style={styles.navArrowText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={[styles.editTitle, styles.editTitleCenter]} numberOfLines={1}>{title}</Text>
+              <TouchableOpacity style={[styles.navArrow, !canNext && styles.navArrowDisabled]} disabled={!canNext} onPress={onNext}>
+                <Text style={styles.navArrowText}>›</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <Text style={styles.editLabel}>Select an Activity:</Text>
           <View style={styles.activityGrid}>
@@ -448,12 +496,21 @@ function CellEditor({
           </View>
 
           <View style={styles.editActions}>
-            <TouchableOpacity style={styles.noteCancel} onPress={onClose}>
-              <Text style={styles.noteCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.noteSave} onPress={() => onApply(act, feel)}>
-              <Text style={styles.noteSaveText}>{bulk ? `Apply to ${title}` : "Save"}</Text>
-            </TouchableOpacity>
+            {bulk ? (
+              <>
+                <TouchableOpacity style={styles.noteCancel} onPress={onClose}>
+                  <Text style={styles.noteCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.noteSave} onPress={() => onApply(act, feel)}>
+                  <Text style={styles.noteSaveText}>{`Apply to ${title}`}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              // Single-cell auto-saves on each pick; this just closes.
+              <TouchableOpacity style={styles.noteSave} onPress={onClose}>
+                <Text style={styles.noteSaveText}>Done</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -536,6 +593,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   editBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 20 },
   editCard: { backgroundColor: c.card, borderRadius: 14, padding: 20, maxHeight: "90%" },
   editTitle: { fontSize: 18, fontWeight: "700", color: c.text, textAlign: "center", marginBottom: 12 },
+  editTitleRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  editTitleCenter: { flex: 1, marginBottom: 0 },
+  navArrow: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: c.surface },
+  navArrowDisabled: { opacity: 0.3 },
+  navArrowText: { fontSize: 28, color: c.text, lineHeight: 30, fontWeight: "700" },
   editLabel: { fontSize: 18, fontWeight: "bold", color: c.text, marginBottom: 12 },
   activityGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 16 },
   activityButton: { borderWidth: 4, width: "48%", padding: 5, marginBottom: 10, alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 5, flexDirection: "row", height: 56 },

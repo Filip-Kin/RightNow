@@ -59,7 +59,7 @@ export default function Settings() {
   async function runSleepSync(): Promise<void> {
     setSleepBusy(true);
     setSleepMsg(null);
-    const r = await syncHealthSleep(Date.now(), { prompt: true });
+    const r = await syncHealthSleep(Date.now(), { prompt: true, fullHistory: true });
     setSleepBusy(false);
     if (r.ok) {
       setSleepMsg(r.filled > 0 ? `Filled ${r.filled} sleep hour${r.filled === 1 ? "" : "s"}.` : "No new sleep hours to fill.");

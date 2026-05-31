@@ -86,15 +86,26 @@ export async function readSleepSessions(
   untilMs: number,
 ): Promise<SleepSession[]> {
   await ensureInit();
-  const { records } = await readRecords("SleepSession", {
-    timeRangeFilter: {
-      operator: "between",
-      startTime: new Date(sinceMs).toISOString(),
-      endTime: new Date(untilMs).toISOString(),
-    },
-  });
-  log("readSleepSessions:", records.length, "sessions");
-  return records
-    .map((r) => ({ start: Date.parse(r.startTime), end: Date.parse(r.endTime) }))
-    .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start);
+  const timeRangeFilter = {
+    operator: "between" as const,
+    startTime: new Date(sinceMs).toISOString(),
+    endTime: new Date(untilMs).toISOString(),
+  };
+  const out: SleepSession[] = [];
+  // Page through so a multi-year backfill gets every session, not just page 1.
+  let pageToken: string | undefined;
+  do {
+    const res = await readRecords("SleepSession", {
+      timeRangeFilter,
+      pageSize: 5000,
+      ...(pageToken ? { pageToken } : {}),
+    });
+    for (const r of res.records) {
+      const s = { start: Date.parse(r.startTime), end: Date.parse(r.endTime) };
+      if (Number.isFinite(s.start) && Number.isFinite(s.end) && s.end > s.start) out.push(s);
+    }
+    pageToken = res.pageToken;
+  } while (pageToken);
+  log("readSleepSessions:", out.length, "sessions");
+  return out;
 }
