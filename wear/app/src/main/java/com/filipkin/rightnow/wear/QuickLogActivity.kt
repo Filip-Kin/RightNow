@@ -82,7 +82,11 @@ class QuickLogActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
               )
             }
-            val rows = activities.chunked(2)
+            // Two-column grid for the regular activities; skip-feeling ones (e.g. Sleep)
+            // go full-width at the bottom since they submit in one tap.
+            val gridActs = activities.filter { !it.skipFeeling }
+            val instantActs = activities.filter { it.skipFeeling }
+            val rows = gridActs.chunked(2)
             items(rows.size) { r ->
               val row = rows[r]
               Row(
@@ -93,12 +97,21 @@ class QuickLogActivity : ComponentActivity() {
                   Chip(
                     label = { Text(a.name, maxLines = 1) },
                     colors = ChipDefaults.chipColors(backgroundColor = Color(a.color), contentColor = Color.White),
-                    onClick = { if (a.skipFeeling) submit(a.index, null) else selected = a },
+                    onClick = { selected = a },
                     modifier = Modifier.weight(1f),
                   )
                 }
                 if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
               }
+            }
+            items(instantActs.size) { i ->
+              val a = instantActs[i]
+              Chip(
+                label = { Text(a.name, maxLines = 1) },
+                colors = ChipDefaults.chipColors(backgroundColor = Color(a.color), contentColor = Color.White),
+                onClick = { submit(a.index, null) },
+                modifier = Modifier.fillMaxWidth(),
+              )
             }
           }
         } else {
