@@ -8,6 +8,7 @@ import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
 import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
 import { refreshHourlyReminder } from "@/lib/hourlyReminder";
+import { startTaxonomyMirror, drainQuickLogQueue } from "@/lib/quickLog";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
@@ -17,10 +18,13 @@ export default function RootLayout() {
     restoreSession();
     maybeSyncHealthOnForeground();
     refreshHourlyReminder();
+    startTaxonomyMirror(); // keep the overlay's plaintext activity mirror fresh
+    drainQuickLogQueue(); // sync any answers the overlay/watch queued while we were away
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") {
         maybeSyncHealthOnForeground();
         refreshHourlyReminder();
+        drainQuickLogQueue();
       }
     });
     return () => sub.remove();

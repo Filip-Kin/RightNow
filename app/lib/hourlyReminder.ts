@@ -120,6 +120,14 @@ if (Platform.OS !== "web") {
     await ensureChannel();
     // Keep the next-hour delivery scheduled (DATE trigger, never fires immediately).
     await scheduleNext(streak, Date.now(), cap);
+    // Safety-net drain: if the overlay's instant headless wake was throttled by Doze,
+    // this periodic fetch still flushes the plaintext quick-log queue within minutes.
+    try {
+      const { restoreSession } = await import("./auth");
+      const { drainQuickLogQueue } = await import("./quickLog");
+      await restoreSession();
+      await drainQuickLogQueue();
+    } catch { /* leave queue for next wake */ }
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch {
     return BackgroundFetch.BackgroundFetchResult.Failed;
