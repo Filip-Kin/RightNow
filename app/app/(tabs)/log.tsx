@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Icon } from "@/components/Icon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useConfig } from "@/lib/config";
 import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { getEntry, setEntry, useStoreLoaded, useUnloggedHours, type HourSlot } from "@/lib/entries";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useActivities } from "@/lib/activities";
@@ -61,13 +61,30 @@ export default function Index() {
   const unlogged = useUnloggedHours(config.catchUpWindowHours);
   const storeLoaded = useStoreLoaded();
 
-  // Snapshot the unlogged queue once the store has loaded so it stays stable as we
-  // submit — that's what lets us step backward/forward through it.
-  const queueRef = useRef<HourSlot[] | null>(null);
-  if (queueRef.current === null && storeLoaded) queueRef.current = unlogged;
-  const queue = queueRef.current ?? [];
+  // Keep the freshest unlogged list in a ref so the focus handler reads current data
+  // (not a stale closure from first render).
+  const liveUnlogged = useRef(unlogged);
+  liveUnlogged.current = unlogged;
 
+  // Snapshot the unlogged queue so it stays stable as we submit (that's what lets us
+  // step backward/forward). Re-snapshotted every time the screen regains focus: /log
+  // is a hidden tab screen that stays mounted after we leave, so without this,
+  // reopening it an hour later from the notification would show the previous hour's
+  // (now-answered) slot at cursor 0.
+  const queueRef = useRef<HourSlot[] | null>(null);
+  const [, forceRender] = useState(0);
   const [cursor, setCursor] = useState(0);
+  if (queueRef.current === null && storeLoaded) queueRef.current = unlogged;
+
+  useFocusEffect(
+    useCallback(() => {
+      queueRef.current = liveUnlogged.current;
+      setCursor(0);
+      forceRender((n) => n + 1);
+    }, []),
+  );
+
+  const queue = queueRef.current ?? [];
   const slot = queue[cursor];
 
   const [selectedActivity, setSelectedActivity] = useState<number | null>(null);

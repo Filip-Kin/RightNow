@@ -4,7 +4,7 @@ import { NotificationPermissionsStatus } from "expo-notifications";
 import { useEffect, useState } from "react";
 import { requestPermissionsAsync } from "expo-notifications";
 import { Alert, AppState, Platform } from "react-native";
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { setSyncStatusListener } from "./entries";
 import { getConfig } from "./config";
 
@@ -177,18 +177,21 @@ let coldStartHandled = false;
 
 export function useNotificationResponseHandler() {
   const router = useRouter();
-  const nav = useNavigation();
 
   useEffect(() => {
     function open(notification: Notifications.Notification, delay = 0) {
       const id = notification.request.identifier;
       const kind = (notification.request.content.data as { kind?: string })?.kind;
       if (id !== "right-now" && id !== "right-now-hourly" && kind !== "hourly") return;
-      // Defer the push so the navigator is mounted (notably on a cold start where
-      // the tap launched the app) - go to the home tab first, then the log screen.
+      // Defer the navigation so the navigator is mounted (notably on a cold start
+      // where the tap launched the app). Always route to home first, THEN to /log:
+      // if /log is already the focused screen (app was left open on it), a bare
+      // push("/log") wouldn't re-focus it, so it'd keep showing the previous hour.
+      // Bouncing through home guarantees /log regains focus and re-snapshots its
+      // queue to the current hour.
       setTimeout(() => {
-        if ((nav.getState()?.routes.length ?? 0) === 0) router.replace("/");
-        router.push("/log");
+        router.navigate("/");
+        setTimeout(() => router.push("/log"), 50);
       }, delay);
     }
 
