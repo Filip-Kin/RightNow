@@ -7,6 +7,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.LaunchedEffect
@@ -79,14 +82,23 @@ class QuickLogActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
               )
             }
-            items(activities.size) { i ->
-              val a = activities[i]
-              Chip(
-                label = { Text(a.name) },
-                colors = ChipDefaults.chipColors(backgroundColor = Color(a.color), contentColor = Color.White),
-                onClick = { if (a.skipFeeling) submit(a.index, null) else selected = a },
+            val rows = activities.chunked(2)
+            items(rows.size) { r ->
+              val row = rows[r]
+              Row(
                 modifier = Modifier.fillMaxWidth(),
-              )
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
+                for (a in row) {
+                  Chip(
+                    label = { Text(a.name, maxLines = 1) },
+                    colors = ChipDefaults.chipColors(backgroundColor = Color(a.color), contentColor = Color.White),
+                    onClick = { if (a.skipFeeling) submit(a.index, null) else selected = a },
+                    modifier = Modifier.weight(1f),
+                  )
+                }
+                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+              }
             }
           }
         } else {
@@ -98,12 +110,22 @@ class QuickLogActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
               )
             }
-            items(FEELINGS.size) { i ->
-              Chip(
-                label = { Text(FEELINGS[i]) },
-                onClick = { submit(sel.index, i) },
+            val frows = (0 until FEELINGS.size).toList().chunked(2)
+            items(frows.size) { r ->
+              val row = frows[r]
+              Row(
                 modifier = Modifier.fillMaxWidth(),
-              )
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
+                for (fi in row) {
+                  Chip(
+                    label = { Text(FEELINGS[fi], maxLines = 1) },
+                    onClick = { submit(sel.index, fi) },
+                    modifier = Modifier.weight(1f),
+                  )
+                }
+                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+              }
             }
           }
         }
