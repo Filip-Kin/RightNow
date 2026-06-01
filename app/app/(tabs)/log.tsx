@@ -243,9 +243,6 @@ export default function Index() {
           })}
         </View>
       </View>
-      <Text style={styles.hintText}>
-        {isLast ? "Last one - pick to finish" : "Pick an activity and a feeling to save"}
-      </Text>
       <View style={{ height: useSafeAreaInsets().bottom }}></View>
     </View>
     </ScreenContainer>
@@ -336,11 +333,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   navBtnDisabled: {
     backgroundColor: c.surface2,
-  },
-  hintText: {
-    textAlign: "center",
-    color: c.textFaint,
-    fontSize: 13,
-    paddingVertical: 8,
   },
 });

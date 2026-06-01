@@ -258,9 +258,11 @@ class QuickLogService : Service() {
     pending = ArrayList()
     stepIndex = 0
     val n = pendingCount()
-    for (i in 1..n) {
+    // Oldest first, ending at the just-elapsed hour - matches the in-app catch-up
+    // order so you fill the gap chronologically up to "right now".
+    for (i in n downTo 1) {
       val c = Calendar.getInstance()
-      c.add(Calendar.HOUR_OF_DAY, -i) // -1 = the just-elapsed hour, then older
+      c.add(Calendar.HOUR_OF_DAY, -i)
       c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
       pending.add(c)
     }
