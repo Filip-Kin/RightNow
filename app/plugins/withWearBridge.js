@@ -58,6 +58,16 @@ object WearBridge {
     r.setUrgent()
     Wearable.getDataClient(ctx).putDataItem(r)
   }
+
+  // Tell the watch the current prompt was answered on the phone, so it cancels its
+  // own hourly notification.
+  fun notifyCleared(ctx: Context) {
+    val req = PutDataMapRequest.create("/rightnow/cleared")
+    req.dataMap.putLong("ts", System.currentTimeMillis())
+    val r = req.asPutDataRequest()
+    r.setUrgent()
+    Wearable.getDataClient(ctx).putDataItem(r)
+  }
 }
 `;
 
@@ -70,6 +80,7 @@ import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
+import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -97,9 +108,13 @@ class RightNowWearListenerService : WearableListenerService() {
         kicked = true
       } catch (e: Exception) {}
     }
-    // Encrypt + push via the existing JS headless drain (loads the DEK from
+    // The watch answered, so the phone's own hourly notification is moot - clear it,
+    // then encrypt + push via the existing JS headless drain (loads the DEK from
     // SecureStore with no user auth). No-op-safe if locked/offline (queue persists).
-    if (kicked) HeadlessKick.kick(applicationContext)
+    if (kicked) {
+      try { NotificationManagerCompat.from(this).cancel(QuickLogScheduler.NOTIF_ID) } catch (e: Exception) {}
+      HeadlessKick.kick(applicationContext)
+    }
   }
 
   // Same append contract as QuickLogService.appendAnswer (the JS drain reads this).

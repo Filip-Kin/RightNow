@@ -27,6 +27,8 @@ class WearListenerService : WearableListenerService() {
             )
             PromptNotifier.show(this)
           }
+          // The prompt was answered on the phone -> clear our notification too.
+          "/rightnow/cleared" -> PromptNotifier.cancel(this)
         }
       } catch (e: Exception) {}
     }

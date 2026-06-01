@@ -31,7 +31,14 @@ const QuickLog: {
   consumeLaunchRoute(): Promise<string | null>;
   pushTaxonomy(json: string): Promise<boolean>;
   pushReminder(json: string): Promise<boolean>;
+  clearPrompt(): Promise<boolean>;
 } | undefined = NativeModules.QuickLog;
+
+/** Answered the hourly prompt in-app: clear the phone notification and tell the
+ *  watch to clear its own (so the two devices stay in sync). */
+export async function clearHourlyPrompt(): Promise<void> {
+  try { await QuickLog?.clearPrompt(); } catch { /* ignore */ }
+}
 
 /** If the app was launched via the notification's "Open in app" action, returns
  *  the route to open ("log") once, then clears it. */

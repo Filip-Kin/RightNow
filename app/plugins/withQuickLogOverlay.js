@@ -318,6 +318,7 @@ class QuickLogService : Service() {
       showActivities()
     } else {
       try { NotificationManagerCompat.from(this).cancel(QuickLogScheduler.NOTIF_ID) } catch (e: Exception) {}
+      try { WearBridge.notifyCleared(applicationContext) } catch (e: Exception) {} // clear the watch notif too
       HeadlessKick.kick(applicationContext)
       teardown()
     }
@@ -483,6 +484,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -539,6 +541,16 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
   @ReactMethod fun pushReminder(json: String, promise: Promise) {
     try { WearBridge.putState(reactApplicationContext, "/rightnow/reminder", json); promise.resolve(true) }
     catch (e: Exception) { promise.resolve(false) }
+  }
+
+  // Answered the hourly prompt in-app: clear the phone notification and tell the watch
+  // to clear its own (keeps the two devices' notifications in sync).
+  @ReactMethod fun clearPrompt(promise: Promise) {
+    try {
+      NotificationManagerCompat.from(reactApplicationContext).cancel(QuickLogScheduler.NOTIF_ID)
+      WearBridge.notifyCleared(reactApplicationContext)
+      promise.resolve(true)
+    } catch (e: Exception) { promise.resolve(false) }
   }
 }
 `;

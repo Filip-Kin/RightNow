@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Icon } from "@/components/Icon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useConfig } from "@/lib/config";
+import { clearHourlyPrompt } from "@/lib/hourlyReminder";
 import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -136,6 +137,7 @@ export default function Index() {
       console.error(e);
       alert(String(e));
     });
+    void clearHourlyPrompt(); // answered in-app: clear the phone + watch notifications
     advance();
   };
 
