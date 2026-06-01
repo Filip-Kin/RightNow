@@ -14,6 +14,10 @@
 //                         cancels the notification, and kicks the headless drain.
 //   QuickLogDrainService - HeadlessJsTaskService running JS 'RightNowQuickLogDrain'.
 //   QuickLogModule/Package - lets JS arm/disarm + manage the overlay permission.
+//
+// NOTE: the scheduler and QuickLogModule here reference WearBridge (phone->watch
+// DataItem pushes), which is provided by plugins/withWearBridge. That plugin MUST be
+// registered alongside this one, or the build won't compile.
 const { withAndroidManifest, withMainApplication, withDangerousMod, AndroidConfig } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
@@ -124,8 +128,20 @@ object QuickLogScheduler {
       .setAutoCancel(true)
       .setOnlyAlertOnce(false)
       .setPriority(NotificationCompat.PRIORITY_MAX)
+      // Don't auto-bridge to the watch: the Wear app posts its own prompt (whose tap
+      // opens the watch UI). Bridging would show a duplicate on the wrist.
+      .setLocalOnly(true)
     if (openPi != null) b.addAction(0, "Open in app", openPi)
     try { NotificationManagerCompat.from(ctx).notify(NOTIF_ID, b.build()) } catch (e: Exception) {}
+    // Trigger the watch prompt for this hour (WearBridge lives in withWearBridge).
+    // Carries the current streak baseline so the watch computes the same pending count.
+    try {
+      val r = reminder(ctx)
+      val streak0 = r?.optInt("streak0", 0) ?: 0
+      val t0 = r?.optLong("t0", System.currentTimeMillis()) ?: System.currentTimeMillis()
+      val cap = r?.optInt("cap", 24) ?: 24
+      WearBridge.putPrompt(ctx, streak0, t0, cap)
+    } catch (e: Exception) {}
   }
 }
 `;
@@ -498,6 +514,19 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
       intent?.removeExtra("rightnow.open")
       promise.resolve(route)
     } catch (e: Exception) { promise.resolve(null) }
+  }
+
+  // Mirror the taxonomy/reminder plaintext state to the watch (WearBridge lives in
+  // plugins/withWearBridge, which must be registered too). JS calls these alongside
+  // its plaintext-file writes so the watch UI stays in sync.
+  @ReactMethod fun pushTaxonomy(json: String, promise: Promise) {
+    try { WearBridge.putState(reactApplicationContext, "/rightnow/taxonomy", json); promise.resolve(true) }
+    catch (e: Exception) { promise.resolve(false) }
+  }
+
+  @ReactMethod fun pushReminder(json: String, promise: Promise) {
+    try { WearBridge.putState(reactApplicationContext, "/rightnow/reminder", json); promise.resolve(true) }
+    catch (e: Exception) { promise.resolve(false) }
   }
 }
 `;

@@ -29,6 +29,8 @@ const QuickLog: {
   canDrawOverlay(): Promise<boolean>;
   requestOverlayPermission(): Promise<boolean>;
   consumeLaunchRoute(): Promise<string | null>;
+  pushTaxonomy(json: string): Promise<boolean>;
+  pushReminder(json: string): Promise<boolean>;
 } | undefined = NativeModules.QuickLog;
 
 /** If the app was launched via the notification's "Open in app" action, returns
@@ -57,6 +59,8 @@ function writeReminder(state: ReminderState): void {
     const f = new File(Paths.document, REMINDER_FILE);
     if (!f.exists) f.create();
     f.write(JSON.stringify(state));
+    // Mirror to the watch so it knows enable-state + the pending-hour baseline.
+    void QuickLog?.pushReminder(JSON.stringify(state));
   } catch { /* best-effort */ }
 }
 

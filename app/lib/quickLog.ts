@@ -13,8 +13,12 @@
 // background-fetch safety net) reads the DEK from SecureStore, encrypts each
 // pending answer via importEntries, pushes to the server, then clears the queue.
 import { File, Paths } from "expo-file-system";
+import { NativeModules } from "react-native";
 import { getActivities, subscribeTaxonomy } from "./activities";
 import { importEntries, push } from "./entries";
+
+// Phone->watch taxonomy mirror (no-op when the native module / Wear bridge is absent).
+const QuickLog: { pushTaxonomy(json: string): Promise<boolean> } | undefined = NativeModules.QuickLog;
 
 export const TAXONOMY_FILE = "quicklog-taxonomy.json";
 export const QUEUE_FILE = "quicklog-queue.json";
@@ -63,6 +67,8 @@ export function writeTaxonomyMirror(): void {
   };
   try {
     writeJson(TAXONOMY_FILE, mirror);
+    // Mirror to the watch too so its activity grid stays in sync.
+    void QuickLog?.pushTaxonomy(JSON.stringify(mirror));
   } catch {
     /* best-effort; overlay falls back to an empty grid until next write */
   }

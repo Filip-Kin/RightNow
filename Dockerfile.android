@@ -35,6 +35,14 @@ RUN yes | sdkmanager --licenses >/dev/null \
          "build-tools;35.0.0" "build-tools;36.0.0" \
          "ndk;27.1.12297006" "cmake;3.22.1" >/dev/null
 
+# Standalone Gradle for the Wear OS module (the Expo app uses its own wrapper; the wear/
+# project is decoupled and pins AGP 8.7.3, which needs Gradle 8.9-8.11.x).
+ENV GRADLE_VERSION=8.11.1
+RUN curl -fsSL https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -o /tmp/gradle.zip \
+      && unzip -q /tmp/gradle.zip -d /opt \
+      && rm /tmp/gradle.zip
+ENV PATH="/opt/gradle-${GRADLE_VERSION}/bin:${PATH}"
+
 WORKDIR /src
 COPY . .
 
@@ -53,3 +61,10 @@ WORKDIR /src/app/android
 RUN --mount=type=cache,target=/root/.gradle \
       ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -x lint \
       && cp app/build/outputs/apk/release/app-release.apk /RightNow.apk
+
+# Wear OS companion APK (standalone wear/ project, signed with the same debug keystore
+# at app/ci/debug.keystore so it pairs with the phone over the Data Layer).
+WORKDIR /src/wear
+RUN --mount=type=cache,target=/root/.gradle \
+      gradle :app:assembleRelease --no-daemon -x lint \
+      && cp app/build/outputs/apk/release/app-release.apk /RightNow-wear.apk
