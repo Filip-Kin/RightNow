@@ -40,6 +40,14 @@ android {
     compose true
   }
 
+  // Sideloaded dev APK: don't let lint-vital gate the release assembly (the phone build
+  // likewise skips lint). Avoids the false-positive InvalidFragmentVersionForActivityResult
+  // on registerForActivityResult in a ComponentActivity.
+  lint {
+    checkReleaseBuilds false
+    abortOnError false
+  }
+
   compileOptions {
     sourceCompatibility JavaVersion.VERSION_17
     targetCompatibility JavaVersion.VERSION_17
