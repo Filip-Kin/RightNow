@@ -409,28 +409,38 @@ export async function push(onProgress?: (sent: number, total: number) => void): 
     if (!dek || pushing) return;
     pushing = true;
     try {
-        const items: { record: PushRecord; clear: () => void }[] = [];
+        // Defer the (CPU-heavy) sealing to the chunk loop so a big push doesn't freeze
+        // the JS thread up front: each chunk is sealed right before it's uploaded, and
+        // we yield between chunks so the progress bar repaints.
+        type Sealer = () => { record: PushRecord; clear: () => void };
+        const sealers: Sealer[] = [];
         for (const id of [...dirty]) {
-            const e = store[id];
-            const sealed = sealEntry(dek, { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source });
-            items.push({ record: { cellId: id, ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: e.deleted, updatedAt: e.updatedAt }, clear: () => dirty.delete(id) });
+            sealers.push(() => {
+                const e = store[id];
+                const sealed = sealEntry(dek, { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source });
+                return { record: { cellId: id, ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: e.deleted, updatedAt: e.updatedAt }, clear: () => dirty.delete(id) };
+            });
         }
         for (const d of [...noteDirty]) {
-            const n = notes[d];
-            const sealed = sealNote(dek, { date: d, note: n.text });
-            items.push({ record: { cellId: noteCellId(dek, d), ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: !n.text, updatedAt: n.updatedAt }, clear: () => noteDirty.delete(d) });
+            sealers.push(() => {
+                const n = notes[d];
+                const sealed = sealNote(dek, { date: d, note: n.text });
+                return { record: { cellId: noteCellId(dek, d), ciphertext: sealed.ciphertext, nonce: sealed.nonce, deleted: !n.text, updatedAt: n.updatedAt }, clear: () => noteDirty.delete(d) };
+            });
         }
         if (taxonomyDirty()) {
-            items.push({ record: taxonomySealedRecord(dek), clear: () => markTaxonomyClean() });
+            sealers.push(() => ({ record: taxonomySealedRecord(dek), clear: () => markTaxonomyClean() }));
         }
-        if (items.length === 0) return;
+        const total = sealers.length;
+        if (total === 0) return;
 
-        onProgress?.(0, items.length);
-        for (let i = 0; i < items.length; i += PUSH_CHUNK) {
-            const slice = items.slice(i, i + PUSH_CHUNK);
+        onProgress?.(0, total);
+        for (let i = 0; i < total; i += PUSH_CHUNK) {
+            const slice = sealers.slice(i, i + PUSH_CHUNK).map((seal) => seal());
             await trpc.entries.push.mutate({ records: slice.map((x) => x.record) });
             for (const x of slice) x.clear();
-            onProgress?.(Math.min(i + slice.length, items.length), items.length);
+            onProgress?.(Math.min(i + slice.length, total), total);
+            if (i + PUSH_CHUNK < total) await new Promise((resolve) => setTimeout(resolve, 0));
         }
     } finally {
         pushing = false;
@@ -484,18 +494,18 @@ function classifySyncError(e: unknown): SyncStatus {
 /** Push local changes, pull remote changes (LWW merge). Never throws; updates sync
  *  status. `onProgress(done,total)` reports the pull+decrypt phase (the slow part on
  *  a fresh device) so a sign-in screen can show a download bar. */
-export async function sync(onProgress?: (done: number, total: number) => void): Promise<void> {
+export async function sync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
     const dek = getDEK();
     if (!dek) return;
     setSyncStatus("syncing");
     try {
     await loadStore();
-    await push();
+    await push((sent, ptotal) => onProgress?.(sent, ptotal, "push"));
 
     const res = await trpc.entries.pull.query({ since: cursor || undefined });
     const cfgId = configCellId(dek);
     const total = res.records.length;
-    onProgress?.(0, total);
+    onProgress?.(0, total, "pull");
     let changed = false;
     let processed = 0;
     for (const r of res.records) {
@@ -503,7 +513,7 @@ export async function sync(onProgress?: (done: number, total: number) => void): 
         // Yield every so often so a big decrypt loop doesn't freeze the UI and the
         // progress bar can repaint.
         if (processed % 250 === 0) {
-            onProgress?.(processed, total);
+            onProgress?.(processed, total, "pull");
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
         // The taxonomy config rides the same table as one reserved cell; route it.
@@ -537,7 +547,7 @@ export async function sync(onProgress?: (done: number, total: number) => void): 
     }
     cursor = res.cursor;
     diskCursor = true;
-    onProgress?.(total, total);
+    onProgress?.(total, total, "pull");
     if (changed) emit();
     await persist();
     setSyncStatus("ok");
@@ -555,7 +565,7 @@ export async function sync(onProgress?: (done: number, total: number) => void): 
  *  cursor (a re-import that didn't bump received_at, or one that failed to decrypt on an
  *  earlier pass) and local cells that were never successfully pushed. Server LWW
  *  (updated_at) makes the re-push idempotent. */
-export async function fullResync(onProgress?: (done: number, total: number) => void): Promise<void> {
+export async function fullResync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
     await loadStore();
     for (const id in store) dirty.add(id);
     for (const d in notes) noteDirty.add(d);

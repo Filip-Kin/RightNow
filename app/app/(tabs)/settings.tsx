@@ -52,6 +52,13 @@ export default function Settings() {
   const [sleepModal, setSleepModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
   const [exportYearN, setExportYearN] = useState(() => new Date().getFullYear());
+  const [syncProgress, setSyncProgress] = useState<{ done: number; total: number; phase: "push" | "pull" } | null>(null);
+
+  function runFullSync() {
+    setSyncProgress({ done: 0, total: 0, phase: "push" });
+    fullResync((done, total, phase) => setSyncProgress({ done, total, phase: phase ?? "pull" }))
+      .finally(() => setSyncProgress(null));
+  }
   useEffect(() => { isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false)); }, []);
 
   function setReminderHour(next: number) {
@@ -151,13 +158,29 @@ export default function Settings() {
         </View>
         <Text style={styles.syncText} numberOfLines={2}>{syncText(syncState.status, syncState.lastSyncAt)}</Text>
         <TouchableOpacity
-          style={[styles.syncBtn, syncState.status === "syncing" && styles.disabled]}
-          disabled={syncState.status === "syncing"}
-          onPress={() => { fullResync(); }}
+          style={[styles.syncBtn, !!syncProgress && styles.disabled]}
+          disabled={!!syncProgress}
+          onPress={runFullSync}
         >
-          <Text style={styles.syncBtnText}>Sync now</Text>
+          {syncProgress ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.syncBtnText}>Sync now</Text>}
         </TouchableOpacity>
       </View>
+      {syncProgress && (
+        <View style={styles.syncProgress}>
+          <View style={styles.syncProgressTrack}>
+            <View
+              style={[
+                styles.syncProgressFill,
+                { width: `${syncProgress.total > 0 ? Math.round((syncProgress.done / syncProgress.total) * 100) : 0}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.syncProgressText}>
+            {syncProgress.phase === "push" ? "Uploading" : "Downloading"}
+            {syncProgress.total > 0 ? ` ${syncProgress.done.toLocaleString()} / ${syncProgress.total.toLocaleString()}` : "…"}
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.label}>Reminders</Text>
       <View style={styles.segment}>
@@ -344,7 +367,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   syncDot: { width: 14, alignItems: "center" },
   dot: { width: 10, height: 10, borderRadius: 5 },
   syncText: { flex: 1, fontSize: 13, color: c.textBody, lineHeight: 17 },
-  syncBtn: { borderWidth: 1, borderColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  syncBtn: { borderWidth: 1, borderColor: c.primary, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, minWidth: 84, alignItems: "center" },
+  syncProgress: { marginTop: 8, gap: 6 },
+  syncProgressTrack: { height: 6, borderRadius: 3, backgroundColor: c.surface2, overflow: "hidden" },
+  syncProgressFill: { height: 6, borderRadius: 3, backgroundColor: c.primary },
+  syncProgressText: { fontSize: 12, color: c.textMuted },
   syncBtnText: { color: c.primary, fontWeight: "700", fontSize: 13 },
   disabled: { opacity: 0.5 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" },
