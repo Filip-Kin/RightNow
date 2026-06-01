@@ -74,7 +74,7 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
 }
 
 /**
- * Foreground hook: fire-and-forget. Deliberately conservative — it does nothing
+ * Foreground hook: fire-and-forget. Deliberately conservative - it does nothing
  * until a manual sync has already succeeded once (`lastHealthSyncAt > 0`), so the
  * app never touches the Health Connect native layer automatically on startup.
  * That's what guarantees a Health problem can't put the app in a launch crash

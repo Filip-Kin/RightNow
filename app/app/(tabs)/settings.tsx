@@ -20,8 +20,8 @@ function syncText(s: SyncStatus, lastSyncAt: number): string {
   switch (s) {
     case "syncing": return "Syncing…";
     case "ok": return lastSyncAt ? `Synced at ${new Date(lastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Synced";
-    case "offline": return "Offline — will retry when you're back online";
-    case "error": return "Not syncing — your session may be invalid. Sign in again.";
+    case "offline": return "Offline - will retry when you're back online";
+    case "error": return "Not syncing - your session may be invalid. Sign in again.";
     default: return "Not synced yet";
   }
 }

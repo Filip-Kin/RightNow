@@ -23,7 +23,7 @@ export interface ActivityDef {
   color: string;
   icon: IconName;
   // When true, selecting this activity in the log flow submits immediately with no
-  // feeling (e.g. Sleep — you can't rate how you felt while asleep).
+  // feeling (e.g. Sleep - you can't rate how you felt while asleep).
   skipFeeling?: boolean;
 }
 

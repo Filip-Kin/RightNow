@@ -5,8 +5,8 @@
 // files in the app's private document dir (Paths.document === Android
 // context.filesDir, so native Kotlin and JS read/write the same paths):
 //
-//   quicklog-taxonomy.json  — JS writes it; native reads it to draw the grid.
-//   quicklog-queue.json     — native appends taps; JS drains + clears it.
+//   quicklog-taxonomy.json  - JS writes it; native reads it to draw the grid.
+//   quicklog-queue.json     - native appends taps; JS drains + clears it.
 //
 // A tap is recorded plaintext only briefly: the headless JS drain task (registered
 // in index.js, woken by the native HeadlessJsTaskService and by the periodic
@@ -84,7 +84,7 @@ let draining = false;
  * Drain the native quick-log queue: encrypt each pending answer into the store and
  * push it. Safe to call from anywhere (foreground, headless task, background-fetch);
  * coalesces concurrent calls and never throws. Returns how many answers were synced.
- * Requires an unlocked session (DEK) — if locked, leaves the queue for next time.
+ * Requires an unlocked session (DEK) - if locked, leaves the queue for next time.
  */
 export async function drainQuickLogQueue(): Promise<number> {
   if (draining) return 0;
@@ -94,7 +94,7 @@ export async function drainQuickLogQueue(): Promise<number> {
     if (!queue || queue.length === 0) return 0;
     const consumed = queue.length;
 
-    // importEntries throws if locked (no DEK) — keep the queue and bail.
+    // importEntries throws if locked (no DEK) - keep the queue and bail.
     await importEntries(queue.map((q) => ({ date: q.date, hour: q.hour, activity: q.activity, feeling: q.feeling })));
     await push();
 

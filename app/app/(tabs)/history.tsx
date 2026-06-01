@@ -416,7 +416,7 @@ function CellEditor({
     if (typeof act === "number") onSave?.(act, i);
   }
   // Single-cell Clear: stage AND persist immediately (clearing one or both fields,
-  // including clear+clear, is a real edit — it shouldn't need anything else to save).
+  // including clear+clear, is a real edit - it shouldn't need anything else to save).
   function clearActivity() {
     if (bulk) { setAct(null); return; }
     setAct(null);

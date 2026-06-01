@@ -289,7 +289,7 @@ export async function setEntry(
 
 /**
  * Auto-fill the given hours with the Sleep activity from a Health read. Only
- * touches hours with no logged data — a manual entry (or any non-health entry)
+ * touches hours with no logged data - a manual entry (or any non-health entry)
  * is left alone. Prior health fills are re-labelled if the sleep activity index
  * changed. updatedAt is the slot's real time so a later manual edit always wins
  * LWW (locally and on the server). Returns the number of cells changed.

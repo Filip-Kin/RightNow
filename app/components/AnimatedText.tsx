@@ -98,7 +98,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     position: "absolute",
     color: c.primary,
     fontWeight: "bold",
-    fontSize: 42,
-    lineHeight: 52,
+    fontSize: 30,
+    lineHeight: 38,
   },
 });

@@ -150,7 +150,7 @@ export interface EntryPayload {
 
 export interface NotePayload {
     // Free-text "what I did today" note for a day. `date` lets a fresh device place
-    // the pulled cell (its HMAC id is opaque). No `hour` field — that's how a pulled
+    // the pulled cell (its HMAC id is opaque). No `hour` field - that's how a pulled
     // cell is told apart from an EntryPayload (see openCell).
     date: string;
     note: string;

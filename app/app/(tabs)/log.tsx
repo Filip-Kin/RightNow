@@ -167,7 +167,7 @@ export default function Index() {
         >
           <Icon name="arrow-back" style={{ color: cursor === 0 ? c.textFaint : c.primary }} />
         </TouchableOpacity>
-        <View style={{ flex: 1, paddingTop: 16 }}>
+        <View style={styles.progressWrap}>
           <ProgressIndicator current={cursor} total={queue.length} />
         </View>
         <TouchableOpacity
@@ -182,7 +182,7 @@ export default function Index() {
         style={{
           flex: 1,
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "flex-start",
           marginBottom: 32,
         }}
       >
@@ -244,7 +244,7 @@ export default function Index() {
         </View>
       </View>
       <Text style={styles.hintText}>
-        {isLast ? "Last one — pick to finish" : "Pick an activity and a feeling to save"}
+        {isLast ? "Last one - pick to finish" : "Pick an activity and a feeling to save"}
       </Text>
       <View style={{ height: useSafeAreaInsets().bottom }}></View>
     </View>
@@ -267,8 +267,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     flexDirection: "row",
   },
   timeTextLabel: {
-    fontSize: 42,
-    lineHeight: 52,
+    fontSize: 30,
+    lineHeight: 38,
     color: c.text,
   },
   label: {
@@ -316,10 +316,15 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   navRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
     marginTop: 8,
-    marginBottom: 24,
+    marginBottom: 28,
+  },
+  progressWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   navBtn: {
     width: 40,

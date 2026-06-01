@@ -39,7 +39,7 @@ export default function ActivitiesScreen() {
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Text style={styles.hint}>
-          Tap an activity to edit it. The number is its stored index — historical data and imports map
+          Tap an activity to edit it. The number is its stored index - historical data and imports map
           to activities by this number.
         </Text>
         {activities.map((a) => (

@@ -179,7 +179,7 @@ export default function ImportScreen() {
         {parsed && (
           <>
             <Text style={styles.summary}>
-              {fileName} — {parsed.cells.length} cells, {parsed.dayCount} days
+              {fileName} - {parsed.cells.length} cells, {parsed.dayCount} days
               {parsed.notes.size > 0 ? `, ${parsed.notes.size} notes` : ""}, values {parsed.values.join(", ")}
             </Text>
 

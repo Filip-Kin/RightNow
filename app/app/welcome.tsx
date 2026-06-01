@@ -59,7 +59,7 @@ function StoreBadge({ label, url }: { label: string; url: string }) {
       onPress={() => url && Linking.openURL(url)}
       activeOpacity={0.85}
     >
-      <Text style={styles.badgeText}>{label}{enabled ? "" : " — soon"}</Text>
+      <Text style={styles.badgeText}>{label}{enabled ? "" : " - soon"}</Text>
     </TouchableOpacity>
   );
 }

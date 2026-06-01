@@ -309,11 +309,20 @@ class QuickLogService : Service() {
 
   private var cardInnerW: Int = 0 // px available for the grid inside the card padding
 
-  // Title for the current step: the hour range, plus "(2 of 3)" when catching up.
-  private fun stepTitle(): String {
+  // The hour range for the current step, e.g. "15:00 - 16:00".
+  private fun stepRange(): String {
     val c = if (stepIndex < pending.size) pending[stepIndex] else Calendar.getInstance()
-    val label = rangeLabelFor(c)
-    return if (pending.size > 1) label + "  (" + (stepIndex + 1) + " of " + pending.size + ")" else label
+    return rangeLabelFor(c)
+  }
+  // "(2 of 3)" when catching up, else empty.
+  private fun stepCounter(): String {
+    return if (pending.size > 1) "(" + (stepIndex + 1) + " of " + pending.size + ")" else ""
+  }
+  // Two centered lines: the prompt + range, then the counter on its own line.
+  private fun stepTitle(prompt: String): String {
+    val counter = stepCounter()
+    val first = prompt + "  " + stepRange()
+    return if (counter.isEmpty()) first else first + "\\n" + counter
   }
 
   private fun makeButton(label: String, fillColor: Int, columns: Int): Button {
@@ -362,7 +371,10 @@ class QuickLogService : Service() {
     val t = TextView(this)
     t.setTextColor(Color.WHITE)
     t.textSize = 18f
+    t.gravity = Gravity.CENTER_HORIZONTAL
     t.setPadding(0, 0, 0, dp(12))
+    val tlp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+    t.layoutParams = tlp
     title = t
     card.addView(t)
 
@@ -392,7 +404,7 @@ class QuickLogService : Service() {
   // (Re)populate the grid with the activity choices for the current step.
   private fun showActivities() {
     val g = grid ?: return
-    title?.text = "What are you doing?  " + stepTitle()
+    title?.text = stepTitle("What are you doing?")
     g.removeAllViews()
     g.columnCount = 2
     val activities = readActivities()
@@ -413,7 +425,7 @@ class QuickLogService : Service() {
 
   private fun showFeelings() {
     val g = grid ?: return
-    title?.text = selectedActivityName + " · feeling?  " + stepTitle()
+    title?.text = stepTitle(selectedActivityName + " - feeling?")
     g.removeAllViews()
     g.columnCount = 3
     val labels = arrayOf("Terrible", "Poor", "Ok", "Neutral", "Good", "Great")
