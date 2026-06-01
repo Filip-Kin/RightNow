@@ -33,9 +33,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "assets/images/icon-512.png",
+          "image": "assets/images/icon-foreground.png",
           "imageWidth": 200,
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#2d3436",
+          "dark": { "backgroundColor": "#2d3436" },
           "resizeMode": "contain"
         }
       ],
@@ -55,6 +56,7 @@
       "./plugins/withHealthConnectQueries",
       "./plugins/withHealthConnectPermissionDelegate",
       "./plugins/withHealthPermissionUsage",
+      "./plugins/withQuickLogOverlay",
       [
         "expo-build-properties",
         {

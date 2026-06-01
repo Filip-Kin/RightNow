@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, cancelDailyReminder, scheduleTestNotification } from "@/lib/notification";
-import { refreshHourlyReminder } from "@/lib/hourlyReminder";
+import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
@@ -115,6 +115,18 @@ export default function Settings() {
       config.dailyReminderEnabled = true;
       await scheduleDailyReminder(config.reminderHour);
     } else if (m === "hourly") {
+      // The hourly nudge taps into a draw-over overlay (so your foreground app keeps
+      // focus); that needs the "draw over other apps" permission.
+      if (!(await canDrawOverlay())) {
+        Alert.alert(
+          "Allow the quick-log popup",
+          "Hourly check-in shows a quick-log popup over whatever you're doing, so you don't have to switch apps. Grant RightNow permission to draw over other apps?",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Open setting", onPress: () => { void requestOverlayPermission(); } },
+          ],
+        );
+      }
       config.dailyReminderEnabled = false;
       await cancelDailyReminder();
       config.hourlyReminderEnabled = true;
