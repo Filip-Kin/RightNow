@@ -2,7 +2,7 @@
 // original WAYDRN spreadsheet. Each cell is filled with the activity's color for
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -36,6 +36,60 @@ interface DayRow {
   hours: (LocalEntry | undefined)[]; // 24
 }
 
+// Fixed list-item heights so FlatList places rows by offset (getItemLayout) instead
+// of async onLayout measurement - the latter drifts on fast scroll and was causing
+// rows to overlap/duplicate. These MUST match the explicit heights set on dayRow /
+// yearHeader in the styles below.
+const DAY_H = 28;
+const YEAR_H = 56;
+
+// Flat list model: a day row, or a year divider between two years.
+type ListItem =
+  | { type: "year"; key: string; year: number }
+  | { type: "day"; key: string; row: DayRow; dayIndex: number };
+
+function computeCellColor(e: LocalEntry | undefined, mode: ColorMode, emptyColor: string): string {
+  if (!e) return emptyColor;
+  if (mode === "feeling") return e.feeling != null ? feelingColors[e.feeling] : emptyColor;
+  return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : emptyColor;
+}
+
+// One day's 24-hour row, memoized so scrolling and unrelated state changes don't
+// re-render every row - only rows whose data, mode, note flag, hovered cell, or the
+// taxonomy (`activities`, compared by ref to refresh colors on edit) actually change.
+const DayGridRow = React.memo(function DayGridRow(props: {
+  row: DayRow; dayIndex: number; styles: any; mode: ColorMode; activities: ActivityDef[];
+  emptyColor: string; shownHour: number; hasNote: boolean;
+  onCell: (dayIdx: number, row: DayRow, h: number, e?: LocalEntry) => void;
+  onHoverIn: (date: string, hour: number, e?: LocalEntry) => void;
+  onHoverOut: () => void;
+  onNote: (key: string) => void;
+}) {
+  const { row, dayIndex, styles, mode, emptyColor, shownHour, hasNote, onCell, onHoverIn, onHoverOut, onNote } = props;
+  return (
+    <View style={styles.dayRow}>
+      <TouchableOpacity
+        style={[styles.dayLabelCol, hasNote && styles.dayLabelNote]}
+        onPress={() => onNote(row.key)}
+      >
+        <Text style={styles.dayLabel} numberOfLines={1}>
+          {row.label}{hasNote ? <Text style={styles.noteDot}> ●</Text> : null}
+        </Text>
+        <Text style={styles.dayWeekday}>{row.weekday}</Text>
+      </TouchableOpacity>
+      {row.hours.map((e, h) => (
+        <Pressable
+          key={h}
+          style={[styles.cell, { backgroundColor: computeCellColor(e, mode, emptyColor) }, shownHour === h && styles.cellSelected]}
+          onPress={() => onCell(dayIndex, row, h, e)}
+          onHoverIn={() => onHoverIn(row.key, h, e)}
+          onHoverOut={onHoverOut}
+        />
+      ))}
+    </View>
+  );
+});
+
 export default function HistoryScreen() {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -48,7 +102,7 @@ export default function HistoryScreen() {
   const [mode, setMode] = useState<ColorMode>("activity");
   // Infinite scroll: render the most recent `dayCount` days, append older pages as
   // you scroll down. Capped at the earliest day that has any data.
-  const DAYS_PER_PAGE = 90;
+  const DAYS_PER_PAGE = 45;
   const [dayCount, setDayCount] = useState(DAYS_PER_PAGE);
   const [hovered, setHovered] = useState<{ date: string; hour: number; entry?: LocalEntry } | null>(null);
   const [noteDate, setNoteDate] = useState<string | null>(null); // day whose note is being edited
@@ -83,11 +137,16 @@ export default function HistoryScreen() {
     setSelectMode((s) => !s);
     clearSelection();
   }
-  function onCellPress(dayIdx: number, item: DayRow, h: number, e?: LocalEntry) {
+  // Stable callbacks so memoized DayGridRows don't re-render on every parent render.
+  const onCell = useCallback((dayIdx: number, item: DayRow, h: number, e?: LocalEntry) => {
     if (!selectMode) { openSingleEditor({ date: item.key, hour: h, entry: e }); return; }
     if (!selAnchor || selEnd) { setSelAnchor({ d: dayIdx, h }); setSelEnd(null); } // start fresh
     else setSelEnd({ d: dayIdx, h }); // complete the rectangle
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, selAnchor, selEnd]);
+  const onHoverIn = useCallback((date: string, hour: number, e?: LocalEntry) => setHovered({ date, hour, entry: e }), []);
+  const onHoverOut = useCallback(() => setHovered(null), []);
+  const onNote = useCallback((key: string) => setNoteDate(key), []);
   function openBulkEditor() {
     if (!selRect) return;
     const cells: { date: string; hour: number }[] = [];
@@ -188,11 +247,44 @@ export default function HistoryScreen() {
     return out;
   }, [byDate, dayCount, maxDays, now]);
 
-  function cellColor(e: LocalEntry | undefined): string {
-    if (!e) return c.empty;
-    if (mode === "feeling") return e.feeling != null ? feelingColors[e.feeling] : c.empty;
-    return e.activity != null ? (getActivity(e.activity)?.color ?? "#9e9e9e") : c.empty;
-  }
+  // Flatten the day rows into the list model, inserting a year divider at each
+  // year boundary. Single-element items (not a Fragment) so FlatList measures each
+  // cell correctly.
+  const listData = useMemo<ListItem[]>(() => {
+    const out: ListItem[] = [];
+    let prevYear: number | null = null;
+    rows.forEach((row, i) => {
+      if (row.year !== prevYear) { out.push({ type: "year", key: `y-${row.year}`, year: row.year }); prevYear = row.year; }
+      out.push({ type: "day", key: row.key, row, dayIndex: i });
+    });
+    return out;
+  }, [rows]);
+
+  // Cumulative offsets so getItemLayout can place items without onLayout measurement.
+  const offsets = useMemo(() => {
+    const arr: number[] = new Array(listData.length);
+    let off = 0;
+    for (let i = 0; i < listData.length; i++) { arr[i] = off; off += listData[i].type === "year" ? YEAR_H : DAY_H; }
+    return arr;
+  }, [listData]);
+  const getItemLayout = useCallback(
+    (_: ArrayLike<ListItem> | null | undefined, index: number) => ({
+      length: listData[index]?.type === "year" ? YEAR_H : DAY_H,
+      offset: offsets[index] ?? 0,
+      index,
+    }),
+    [listData, offsets],
+  );
+
+  // Append the next page; the ref guards against a burst of onEndReached events
+  // skipping ahead multiple pages at once. Reset once the new page has rendered.
+  const loadingRef = useRef(false);
+  useEffect(() => { loadingRef.current = false; }, [dayCount]);
+  const loadMore = useCallback(() => {
+    if (loadingRef.current || dayCount >= maxDays) return;
+    loadingRef.current = true;
+    setDayCount((n) => Math.min(maxDays, n + DAYS_PER_PAGE));
+  }, [dayCount, maxDays]);
 
   return (
     <ScreenContainer maxWidth={1100}>
@@ -219,46 +311,37 @@ export default function HistoryScreen() {
 
       {/* Infinite scroll back through history; year headers mark the boundaries. */}
       <FlatList
-        data={rows}
-        keyExtractor={(r) => r.key}
-        initialNumToRender={40}
-        windowSize={11}
-        onEndReachedThreshold={1.5}
-        onEndReached={() => setDayCount((n) => Math.min(maxDays, n + DAYS_PER_PAGE))}
-        renderItem={({ item, index }) => {
-          const showYear = index === 0 || rows[index - 1].year !== item.year;
-          return (
-            <>
-              {showYear && (
-                <View style={styles.yearHeader}>
-                  <Text style={styles.yearHeaderText}>{item.year}</Text>
-                </View>
-              )}
-              <View style={styles.dayRow}>
-                <TouchableOpacity
-                  style={[styles.dayLabelCol, notes[item.key] && styles.dayLabelNote]}
-                  onPress={() => setNoteDate(item.key)}
-                >
-                  <Text style={styles.dayLabel} numberOfLines={1}>
-                    {item.label}{notes[item.key] ? <Text style={styles.noteDot}> ●</Text> : null}
-                  </Text>
-                  <Text style={styles.dayWeekday}>{item.weekday}</Text>
-                </TouchableOpacity>
-                {item.hours.map((e, h) => (
-                  <Pressable
-                    key={h}
-                    style={[
-                      styles.cell,
-                      { backgroundColor: cellColor(e) },
-                      shown?.date === item.key && shown?.hour === h && styles.cellSelected,
-                    ]}
-                    onPress={() => onCellPress(index, item, h, e)}
-                    onHoverIn={() => setHovered({ date: item.key, hour: h, entry: e })}
-                    onHoverOut={() => setHovered(null)}
-                  />
-                ))}
+        data={listData}
+        keyExtractor={(it) => it.key}
+        getItemLayout={getItemLayout}
+        initialNumToRender={30}
+        maxToRenderPerBatch={24}
+        windowSize={9}
+        onEndReachedThreshold={1.2}
+        onEndReached={loadMore}
+        renderItem={({ item }) => {
+          if (item.type === "year") {
+            return (
+              <View style={styles.yearHeader}>
+                <Text style={styles.yearHeaderText}>{item.year}</Text>
               </View>
-            </>
+            );
+          }
+          return (
+            <DayGridRow
+              row={item.row}
+              dayIndex={item.dayIndex}
+              styles={styles}
+              mode={mode}
+              activities={activities}
+              emptyColor={c.empty}
+              hasNote={!!notes[item.row.key]}
+              shownHour={shown?.date === item.row.key ? shown.hour : -1}
+              onCell={onCell}
+              onHoverIn={onHoverIn}
+              onHoverOut={onHoverOut}
+              onNote={onNote}
+            />
           );
         }}
         ListFooterComponent={<View style={{ height: 24 }} />}
@@ -538,11 +621,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   modeTextActive: { color: c.onPrimary },
 
   headerRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "flex-end", marginBottom: 2 },
-  yearHeader: { paddingTop: 18, paddingBottom: 6, alignItems: "center" },
+  yearHeader: { height: YEAR_H, alignItems: "center", justifyContent: "center" },
   yearHeaderText: { fontSize: 26, fontWeight: "800", color: c.text, letterSpacing: 1 },
   headerCell: { flex: 1, alignItems: "center" },
   headerText: { fontSize: 8, color: c.textFaint },
-  dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", marginBottom: 2 },
+  dayRow: { flexDirection: "row", paddingHorizontal: 12, alignItems: "center", height: DAY_H },
   dayLabelCol: { width: 46, paddingVertical: 1, paddingHorizontal: 3, borderRadius: 4 },
   dayLabelNote: { backgroundColor: c.noteHighlight, borderWidth: 1, borderColor: c.noteBorder }, // a day with a note gets a highlighted date box
   noteDot: { fontSize: 7, color: c.noteDot },

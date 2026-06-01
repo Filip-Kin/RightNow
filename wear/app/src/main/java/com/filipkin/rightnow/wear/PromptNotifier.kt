@@ -32,6 +32,10 @@ object PromptNotifier {
       .setContentTitle("RightNow")
       .setContentText("What are you doing? Tap to log.")
       .setContentIntent(pi)
+      // Launch the answer screen directly (no swipe + open-app dance). Falls back to a
+      // heads-up notification if the OS withholds full-screen-intent permission.
+      .setFullScreenIntent(pi, true)
+      .setCategory(NotificationCompat.CATEGORY_REMINDER)
       .setAutoCancel(true)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .build()

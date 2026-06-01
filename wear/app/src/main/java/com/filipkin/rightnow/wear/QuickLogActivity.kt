@@ -41,6 +41,9 @@ class QuickLogActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Let the full-screen-intent prompt wake the watch and show over the lock screen.
+    setShowWhenLocked(true)
+    setTurnScreenOn(true)
     if (Build.VERSION.SDK_INT >= 33 &&
       ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) {
