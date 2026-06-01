@@ -55,7 +55,7 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
     const sinceMs = opts.fullHistory ? FULL_HISTORY_START_MS : now - BACKFILL_DAYS * DAY_MS;
     const sessions = await readSleepSessions(sinceMs, now);
     const slots = sleepHours(sessions);
-    const filled = await fillHealthSleep(slots, cfg.sleepActivityIndex);
+    const filled = await fillHealthSleep(slots, 0); // Sleep is permanently activity index 0
     // eslint-disable-next-line no-console
     console.warn("[health] mapped", slots.length, "sleep hours,", filled, "newly filled;",
       "sample:", JSON.stringify(slots.slice(0, 24)));

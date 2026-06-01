@@ -99,6 +99,14 @@ function sortByIndex(list: ActivityDef[]): ActivityDef[] {
   return [...list].sort((a, b) => a.index - b.index);
 }
 
+// Sleep is a permanent activity pinned at index 0: every answer UI (app, overlay,
+// watch) renders it as a full-width chip at the bottom, and the Health sleep
+// auto-fill writes index 0 directly. If a pulled config or import ever dropped it,
+// re-inject the default Sleep so index 0 is always present.
+function withSleep(list: ActivityDef[]): ActivityDef[] {
+  return list.some((a) => a.index === 0) ? list : [DEFAULT_ACTIVITIES[0], ...list];
+}
+
 async function persist() {
   await AsyncStorage.setItem(STORE_KEY, JSON.stringify(config));
 }
@@ -108,7 +116,7 @@ export async function loadTaxonomy(): Promise<void> {
   const raw = await AsyncStorage.getItem(STORE_KEY);
   if (raw) {
     const parsed = JSON.parse(raw) as TaxonomyConfig;
-    config = { version: 1, activities: sortByIndex(parsed.activities ?? DEFAULT_ACTIVITIES), updatedAt: parsed.updatedAt ?? 0 };
+    config = { version: 1, activities: sortByIndex(withSleep(parsed.activities ?? DEFAULT_ACTIVITIES)), updatedAt: parsed.updatedAt ?? 0 };
   }
   loaded = true;
   emit();
@@ -140,7 +148,7 @@ export function activityName(index: number): string {
 }
 
 function mutate(next: ActivityDef[]) {
-  config = { version: 1, activities: sortByIndex(next), updatedAt: Date.now() };
+  config = { version: 1, activities: sortByIndex(withSleep(next)), updatedAt: Date.now() };
   dirty = true;
   emit();
   void persist();
@@ -153,6 +161,7 @@ export function upsertActivity(def: ActivityDef) {
 }
 
 export function removeActivity(index: number) {
+  if (index === 0) return; // Sleep is permanent (pinned at index 0)
   mutate(config.activities.filter((a) => a.index !== index));
 }
 
@@ -197,7 +206,7 @@ export function markTaxonomyClean() {
 export function applyPulledConfig(dek: Uint8Array, record: { ciphertext: string; nonce: string; updatedAt: number }): boolean {
   if (record.updatedAt <= config.updatedAt) return false;
   const pulled = openJson<TaxonomyConfig>(dek, { ciphertext: record.ciphertext, nonce: record.nonce });
-  config = { version: 1, activities: sortByIndex(pulled.activities ?? []), updatedAt: record.updatedAt };
+  config = { version: 1, activities: sortByIndex(withSleep(pulled.activities ?? [])), updatedAt: record.updatedAt };
   void persist();
   emit();
   return true;

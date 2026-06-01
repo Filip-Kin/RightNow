@@ -22,7 +22,6 @@ export interface Config {
   // Connect for now). Only fills hours you haven't logged; never overwrites a
   // manual entry. iOS/HealthKit is a later pass.
   healthSleepEnabled: boolean;
-  sleepActivityIndex: number; // which activity counts as "asleep"
   lastHealthSyncAt: number; // epoch ms of the last successful health read (0 = never)
   // Whether the post-sign-in "set up this device" flow has been completed/dismissed
   // on this device (notifications, battery optimization, Health permissions).
@@ -40,7 +39,6 @@ function parse(value: string | null): Config {
   config.catchUpWindowHours ??= 24;
   config.theme ??= "system";
   config.healthSleepEnabled ??= false;
-  config.sleepActivityIndex ??= 0;
   config.lastHealthSyncAt ??= 0;
   config.deviceSetupDone ??= false;
   return config;

@@ -276,22 +276,6 @@ export default function Settings() {
             </View>
             {config.healthSleepEnabled ? (
               <>
-                <Text style={styles.sleepSub}>Which activity is sleep?</Text>
-                <View style={styles.chipsWrap}>
-                  {getActivities().map((a) => {
-                    const active = a.index === config.sleepActivityIndex;
-                    return (
-                      <TouchableOpacity
-                        key={a.index}
-                        style={[styles.chip, active && styles.chipActive]}
-                        onPress={() => { config.sleepActivityIndex = a.index; setSleepMsg(null); }}
-                      >
-                        <View style={[styles.chipDot, { backgroundColor: activityColor(a.index) }]} />
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{a.name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
                 <View style={styles.sleepActions}>
                   <TouchableOpacity
                     style={[styles.syncBtn, sleepBusy && styles.disabled]}

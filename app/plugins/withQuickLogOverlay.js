@@ -419,24 +419,36 @@ class QuickLogService : Service() {
     try { wm.addView(scrim, params); showActivities() } catch (e: Exception) { teardown() }
   }
 
-  // (Re)populate the grid with the activity choices for the current step.
+  // (Re)populate the grid with the activity choices for the current step. Regular
+  // activities go in a 2-column grid; skip-feeling ones (Sleep) span the full width
+  // at the bottom (matching the in-app screen + the watch).
   private fun showActivities() {
     val g = grid ?: return
     title?.text = stepTitle("What are you doing?")
     g.removeAllViews()
     g.columnCount = 2
     val activities = readActivities()
+    val instant = ArrayList<JSONObject>()
     for (i in 0 until activities.length()) {
       val a = activities.optJSONObject(i) ?: continue
+      if (a.optBoolean("skipFeeling", false)) { instant.add(a); continue }
       val idx = a.optInt("index", i)
       val name = a.optString("name", "?")
       val color = try { Color.parseColor(a.optString("color", "#888888")) } catch (e: Exception) { Color.GRAY }
-      val skipFeeling = a.optBoolean("skipFeeling", false)
       val b = makeButton(name, color, 2)
-      b.setOnClickListener {
-        if (skipFeeling) finishAnswer(idx, null)
-        else { selectedActivity = idx; selectedActivityName = name; showFeelings() }
-      }
+      b.setOnClickListener { selectedActivity = idx; selectedActivityName = name; showFeelings() }
+      g.addView(b)
+    }
+    for (j in 0 until instant.size) {
+      val a = instant[j]
+      val idx = a.optInt("index", 0)
+      val name = a.optString("name", "?")
+      val color = try { Color.parseColor(a.optString("color", "#888888")) } catch (e: Exception) { Color.GRAY }
+      val b = makeButton(name, color, 1)
+      val lp = b.layoutParams as GridLayout.LayoutParams
+      lp.columnSpec = GridLayout.spec(0, 2)
+      b.layoutParams = lp
+      b.setOnClickListener { finishAnswer(idx, null) }
       g.addView(b)
     }
   }

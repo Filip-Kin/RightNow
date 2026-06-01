@@ -58,6 +58,12 @@ export default function Index() {
   const config = useConfig();
   const activities = useActivities();
 
+  // Sleep (skip-feeling) renders full-width at the bottom, matching the overlay + watch.
+  const orderedActivities = [
+    ...activities.filter((a) => !a.skipFeeling),
+    ...activities.filter((a) => a.skipFeeling),
+  ];
+
   const unlogged = useUnloggedHours(config.catchUpWindowHours);
   const storeLoaded = useStoreLoaded();
 
@@ -188,7 +194,7 @@ export default function Index() {
       >
         <Text style={styles.label}>Select an Activity:</Text>
         <View style={styles.activityGrid}>
-          {activities.map((activity, index) => (
+          {orderedActivities.map((activity) => (
             <TouchableOpacity
               key={activity.index}
               style={[
@@ -200,9 +206,7 @@ export default function Index() {
                 },
                 styles.activityButton,
                 selectedActivity === activity.index && styles.selectedActivity,
-                activities.length % 2 !== 0 && index === 0
-                  ? { width: "100%" }
-                  : {},
+                activity.skipFeeling ? { width: "100%" } : {},
               ]}
               onPress={() => handleActivityPress(activity)}
             >

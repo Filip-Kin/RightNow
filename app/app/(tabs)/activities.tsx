@@ -122,12 +122,17 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
 
             <Text style={styles.fieldLabel}>Index</Text>
             <TextInput
-              style={[styles.input, indexTaken && styles.inputError]}
+              style={[styles.input, indexTaken && styles.inputError, originalIndex === 0 && { opacity: 0.6 }]}
               value={String(draft.index)}
               onChangeText={(t) => onChange({ ...draft, index: parseInt(t.replace(/[^0-9]/g, "") || "0", 10) })}
               keyboardType="number-pad"
+              editable={originalIndex !== 0}
             />
-            {indexTaken && <Text style={styles.errorText}>Index #{draft.index} is already used.</Text>}
+            {originalIndex === 0 ? (
+              <Text style={styles.switchHint}>Sleep is fixed at index 0 and can't be removed.</Text>
+            ) : indexTaken ? (
+              <Text style={styles.errorText}>Index #{draft.index} is already used.</Text>
+            ) : null}
 
             <Text style={styles.fieldLabel}>Color</Text>
             <View style={styles.choiceWrap}>
@@ -163,6 +168,7 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
               <Switch
                 value={!!draft.skipFeeling}
                 onValueChange={(v) => onChange({ ...draft, skipFeeling: v })}
+                disabled={originalIndex === 0}
               />
             </View>
 
@@ -175,7 +181,7 @@ function Editor({ draft, originalIndex, existing, onChange, onClose }: {
               </TouchableOpacity>
             </View>
 
-            {originalIndex !== null && (
+            {originalIndex !== null && originalIndex !== 0 && (
               confirmDelete ? (
                 <View style={styles.confirmRow}>
                   <Text style={styles.confirmText}>
