@@ -99,5 +99,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     color: c.primary,
     fontWeight: "bold",
     fontSize: 42,
+    lineHeight: 52,
   },
 });

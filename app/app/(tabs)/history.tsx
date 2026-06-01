@@ -13,6 +13,8 @@ import {
   activityName, feelingColors, feelingIcons, feelings, getActivity, getContrastingTextColor,
   lightenColor, useActivities, type ActivityDef,
 } from "@/lib/activities";
+import { useConfig } from "@/lib/config";
+import { hourRangeLabel } from "@/lib/time";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 // A field choice in the cell editor: a value, null (clear it), or "keep" (leave
@@ -41,6 +43,7 @@ export default function HistoryScreen() {
   const entries = useEntries();
   const notes = useNotes();
   const activities = useActivities(); // re-render on taxonomy edits (colors/names)
+  const config = useConfig();
   const [now] = useState(() => Date.now());
   const [mode, setMode] = useState<ColorMode>("activity");
   // Infinite scroll: render the most recent `dayCount` days, append older pages as
@@ -95,13 +98,12 @@ export default function HistoryScreen() {
   }
   function openSingleEditor(s: { date: string; hour: number; entry?: LocalEntry }) {
     const [y, mo, d] = s.date.split("-").map(Number);
-    const h12 = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
     setEditor({
       cells: [{ date: s.date, hour: s.hour }],
       activity: s.entry?.activity ?? null,
       feeling: s.entry?.feeling ?? null,
       bulk: false,
-      title: `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d} · ${h12(s.hour)}`,
+      title: `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d} · ${hourRangeLabel(s.hour, config.hour24)}`,
     });
   }
   async function applyEditor(act: FieldChoice, feel: FieldChoice) {
@@ -259,11 +261,11 @@ export default function HistoryScreen() {
             </>
           );
         }}
-        ListFooterComponent={<Legend mode={mode} />}
+        ListFooterComponent={<View style={{ height: 24 }} />}
       />
 
       {!selectMode && shown && (
-        <DetailBar selected={shown} note={notes[shown.date]} />
+        <DetailBar selected={shown} note={notes[shown.date]} hour24={config.hour24} />
       )}
       {selectMode && (
         <View style={styles.selBar}>
@@ -342,16 +344,15 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
 }
 
 
-function DetailBar({ selected, note }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string }) {
+function DetailBar({ selected, note, hour24 }: { selected: { date: string; hour: number; entry?: LocalEntry }; note?: string; hour24: boolean }) {
   const styles = useThemedStyles(makeStyles);
   const e = selected.entry;
   const [y, mo, d] = selected.date.split("-").map(Number);
   const dateLabel = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
-  const h12 = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
   return (
     <View style={styles.detail}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.detailTitle}>{dateLabel} · {h12(selected.hour)}–{h12((selected.hour + 1) % 24)}</Text>
+        <Text style={styles.detailTitle}>{dateLabel} · {hourRangeLabel(selected.hour, hour24)}</Text>
         {e
           ? (
             <Text style={styles.detailBody}>
@@ -414,6 +415,23 @@ function CellEditor({
     setFeel(i);
     if (typeof act === "number") onSave?.(act, i);
   }
+  // Single-cell Clear: stage AND persist immediately (clearing one or both fields,
+  // including clear+clear, is a real edit — it shouldn't need anything else to save).
+  function clearActivity() {
+    if (bulk) { setAct(null); return; }
+    setAct(null);
+    onSave?.(null, typeof feel === "number" ? feel : null);
+  }
+  function clearFeeling() {
+    if (bulk) { setFeel(null); return; }
+    setFeel(null);
+    onSave?.(typeof act === "number" ? act : null, null);
+  }
+  // "Done" commits the current selection (covers staged-but-unsaved states) and closes.
+  function done() {
+    if (!bulk) onSave?.(typeof act === "number" ? act : null, typeof feel === "number" ? feel : null);
+    onClose();
+  }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -454,7 +472,7 @@ function CellEditor({
                 <Text style={{ color: getContrastingTextColor(a.color) }}>{a.name}</Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={[styles.neutralButton, act === null && styles.neutralButtonActive]} onPress={() => setAct(null)}>
+            <TouchableOpacity style={[styles.neutralButton, act === null && styles.neutralButtonActive]} onPress={clearActivity}>
               <Text style={styles.neutralButtonText}>Clear</Text>
             </TouchableOpacity>
           </View>
@@ -475,7 +493,7 @@ function CellEditor({
                 </TouchableOpacity>
               );
             })}
-            <TouchableOpacity style={styles.feelingItem} onPress={() => setFeel(null)}>
+            <TouchableOpacity style={styles.feelingItem} onPress={clearFeeling}>
               <Text style={[styles.feelingKeep, feel === null && styles.feelingKeepActive]}>Clear</Text>
             </TouchableOpacity>
           </View>
@@ -491,8 +509,8 @@ function CellEditor({
                 </TouchableOpacity>
               </>
             ) : (
-              // Single-cell auto-saves on each pick; this just closes.
-              <TouchableOpacity style={styles.noteSave} onPress={onClose}>
+              // Single-cell: commit the current selection (covers clear+clear) and close.
+              <TouchableOpacity style={styles.noteSave} onPress={done}>
                 <Text style={styles.noteSaveText}>Done</Text>
               </TouchableOpacity>
             )}
@@ -500,28 +518,6 @@ function CellEditor({
         </View>
       </View>
     </Modal>
-  );
-}
-
-function Legend({ mode }: { mode: ColorMode }) {
-  const styles = useThemedStyles(makeStyles);
-  const activities = useActivities();
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.legend} contentContainerStyle={{ gap: 12, paddingHorizontal: 12 }}>
-      {mode === "activity"
-        ? activities.map((a) => (
-          <View key={a.index} style={styles.legendItem}>
-            <View style={[styles.legendSwatch, { backgroundColor: a.color }]} />
-            <Text style={styles.legendText}>{a.name}</Text>
-          </View>
-        ))
-        : feelings.map((f, i) => (
-          <View key={f} style={styles.legendItem}>
-            <View style={[styles.legendSwatch, { backgroundColor: feelingColors[i] }]} />
-            <Text style={styles.legendText}>{f}</Text>
-          </View>
-        ))}
-    </ScrollView>
   );
 }
 
@@ -606,8 +602,4 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   noteSave: { backgroundColor: c.primary, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
   noteSaveText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
 
-  legend: { marginTop: 12, marginBottom: 16 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  legendSwatch: { width: 14, height: 14, borderRadius: 3 },
-  legendText: { fontSize: 12, color: c.textBody },
 });

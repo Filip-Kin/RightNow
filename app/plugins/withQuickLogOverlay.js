@@ -256,9 +256,45 @@ class QuickLogService : Service() {
 
   private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
+  // The 24h range for the just-elapsed hour, e.g. "15:00 - 16:00".
+  private fun rangeLabel(): String {
+    val now = Calendar.getInstance()
+    val end = now.get(Calendar.HOUR_OF_DAY)
+    val start = (end + 23) % 24
+    fun fmt(h: Int) = (if (h < 10) "0" else "") + h + ":00"
+    return fmt(start) + " - " + fmt(end)
+  }
+
+  private var cardInnerW: Int = 0 // px available for the grid inside the card padding
+
+  private fun makeButton(label: String, fillColor: Int, columns: Int): Button {
+    val b = Button(this)
+    b.text = label
+    b.setTextColor(Color.WHITE)
+    b.isAllCaps = false
+    b.textSize = 13f
+    b.setPadding(dp(4), 0, dp(4), 0)
+    val bg = GradientDrawable()
+    bg.setColor(fillColor)
+    bg.cornerRadius = dp(8).toFloat()
+    b.background = bg
+    val margin = dp(4)
+    val lp = GridLayout.LayoutParams()
+    // Width derived from the card's inner width so columns + margins never overflow.
+    lp.width = (cardInnerW / columns) - margin * 2
+    lp.height = dp(54)
+    lp.setMargins(margin, margin, margin, margin)
+    b.layoutParams = lp
+    return b
+  }
+
   private fun showOverlay() {
     val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
     windowManager = wm
+
+    val screenW = resources.displayMetrics.widthPixels
+    val cardW = Math.min(screenW - dp(32), dp(360))
+    cardInnerW = cardW - dp(32) // minus the card's horizontal padding
 
     val scrim = LinearLayout(this)
     scrim.setBackgroundColor(Color.parseColor("#99000000"))
@@ -275,7 +311,7 @@ class QuickLogService : Service() {
     card.setOnClickListener { }
 
     val t = TextView(this)
-    t.text = "What are you doing right now?"
+    t.text = "What are you doing? (" + rangeLabel() + ")"
     t.setTextColor(Color.WHITE)
     t.textSize = 18f
     t.setPadding(0, 0, 0, dp(12))
@@ -292,19 +328,7 @@ class QuickLogService : Service() {
       val name = a.optString("name", "?")
       val color = try { Color.parseColor(a.optString("color", "#888888")) } catch (e: Exception) { Color.GRAY }
       val skipFeeling = a.optBoolean("skipFeeling", false)
-      val b = Button(this)
-      b.text = name
-      b.setTextColor(Color.WHITE)
-      b.isAllCaps = false
-      val bg = GradientDrawable()
-      bg.setColor(color)
-      bg.cornerRadius = dp(8).toFloat()
-      b.background = bg
-      val lp = GridLayout.LayoutParams()
-      lp.width = dp(150)
-      lp.height = dp(54)
-      lp.setMargins(dp(4), dp(4), dp(4), dp(4))
-      b.layoutParams = lp
+      val b = makeButton(name, color, 2)
       b.setOnClickListener {
         if (skipFeeling) finishAnswer(idx, null)
         else { selectedActivity = idx; selectedActivityName = name; showFeelings() }
@@ -315,7 +339,7 @@ class QuickLogService : Service() {
     scroll.addView(g)
     card.addView(scroll)
 
-    scrim.addView(card, LinearLayout.LayoutParams(dp(330), LinearLayout.LayoutParams.WRAP_CONTENT))
+    scrim.addView(card, LinearLayout.LayoutParams(cardW, LinearLayout.LayoutParams.WRAP_CONTENT))
 
     val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
       WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -339,19 +363,7 @@ class QuickLogService : Service() {
     g.columnCount = 3
     val labels = arrayOf("Terrible", "Poor", "Ok", "Neutral", "Good", "Great")
     for (i in labels.indices) {
-      val b = Button(this)
-      b.text = labels[i]
-      b.setTextColor(Color.WHITE)
-      b.isAllCaps = false
-      val bg = GradientDrawable()
-      bg.setColor(Color.parseColor("#3a3a3c"))
-      bg.cornerRadius = dp(8).toFloat()
-      b.background = bg
-      val lp = GridLayout.LayoutParams()
-      lp.width = dp(100)
-      lp.height = dp(54)
-      lp.setMargins(dp(4), dp(4), dp(4), dp(4))
-      b.layoutParams = lp
+      val b = makeButton(labels[i], Color.parseColor("#3a3a3c"), 3)
       val feeling = i
       b.setOnClickListener { finishAnswer(selectedActivity, feeling) }
       g.addView(b)

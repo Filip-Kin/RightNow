@@ -268,6 +268,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   timeTextLabel: {
     fontSize: 42,
+    lineHeight: 52,
     color: c.text,
   },
   label: {

@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { useConfig } from "@/lib/config";
 import { sync } from "@/lib/entries";
 import { requestNotificationPermissionsAsync } from "@/lib/notification";
-import { refreshHourlyReminder } from "@/lib/hourlyReminder";
+import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { requestIgnoreBatteryOptimizations } from "@/lib/battery";
 import { isHealthAvailable } from "@/lib/health";
 import { syncHealthSleep } from "@/lib/healthSync";
@@ -33,6 +33,7 @@ export default function SetupScreen() {
   const [synced, setSynced] = useState(false);
   const [notif, setNotif] = useState<StepState>("idle");
   const [battery, setBattery] = useState<StepState>("idle");
+  const [overlay, setOverlay] = useState<StepState>("idle");
   const [health, setHealth] = useState<StepState>("idle");
   const [hcAvailable, setHcAvailable] = useState(false);
 
@@ -44,6 +45,7 @@ export default function SetupScreen() {
       .finally(() => { setProgress(null); setSynced(true); });
     Notifications.getPermissionsAsync().then((p) => { if (p.granted) setNotif("done"); }).catch(() => {});
     isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false));
+    canDrawOverlay().then((ok) => { if (ok) setOverlay("done"); }).catch(() => {});
   }, []);
 
   if (status === "loading") return null;
@@ -58,6 +60,12 @@ export default function SetupScreen() {
     setBattery("busy");
     await requestIgnoreBatteryOptimizations(Application.applicationId ?? "com.filipkin.rightnow");
     setBattery("done");
+  }
+  async function doOverlay() {
+    setOverlay("busy");
+    await requestOverlayPermission();
+    // The grant happens on a system screen; re-check when we return.
+    setOverlay((await canDrawOverlay()) ? "done" : "idle");
   }
   async function doHealth() {
     setHealth("busy");
@@ -101,6 +109,14 @@ export default function SetupScreen() {
             icon="battery-saver" title="Run in the background"
             desc="Exempt RightNow from battery optimization so hourly reminders fire on time."
             state={battery} onPress={doBattery} cta="Open setting"
+          />
+        ) : null}
+        {Platform.OS === "android" ? (
+          <Step
+            styles={styles} c={c}
+            icon="layers" title="Quick-log popup"
+            desc="Let the hourly check-in pop up over other apps so you can log without switching away."
+            state={overlay} onPress={doOverlay} cta="Allow"
           />
         ) : null}
         {hcAvailable ? (
