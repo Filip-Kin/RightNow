@@ -137,6 +137,14 @@ export function getEntry(date: string, hour: number): LocalEntry | undefined {
     return e && !e.deleted ? e : undefined;
 }
 
+/** Whether an hour counts as logged for catch-up purposes: it has a cell with an
+ *  activity OR a feeling. A cleared cell (both null) is treated as still unlogged,
+ *  so clearing an hour re-surfaces it in the "to log" count. */
+export function isHourLogged(date: string, hour: number): boolean {
+    const e = getEntry(date, hour);
+    return !!e && (e.activity !== null || e.feeling !== null);
+}
+
 /** All non-deleted entries currently in the local store (decrypted). */
 export function getAllEntries(): LocalEntry[] {
     const out: LocalEntry[] = [];
@@ -210,7 +218,7 @@ export function getUnloggedHours(windowHours: number, now: number): HourSlot[] {
     for (let i = windowHours; i >= 1; i--) {
         const t = new Date(hourStart.getTime() - i * HOUR_MS); // a fully-elapsed block start
         const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
-        if (!getEntry(date, t.getHours())) out.push({ date, hour: t.getHours() });
+        if (!isHourLogged(date, t.getHours())) out.push({ date, hour: t.getHours() });
     }
     return out;
 }
@@ -228,7 +236,7 @@ export function trailingUnloggedStreak(cap: number, now: number): number {
     for (let i = 1; i <= cap; i++) {
         const t = new Date(hourStart.getTime() - i * HOUR_MS);
         const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
-        if (getEntry(date, t.getHours())) break;
+        if (isHourLogged(date, t.getHours())) break;
         streak++;
     }
     return streak;

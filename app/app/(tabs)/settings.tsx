@@ -2,11 +2,11 @@ import React, { useEffect, useState } from "react";
 import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert, Modal } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
-import { resetConfig, useConfig, type ThemePref } from "@/lib/config";
+import { useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { scheduleDailyReminder, cancelDailyReminder, scheduleTestNotification } from "@/lib/notification";
+import { scheduleDailyReminder, cancelDailyReminder } from "@/lib/notification";
 import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
 import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
@@ -258,10 +258,6 @@ export default function Settings() {
       <View style={styles.account}>
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
         <Button title={"Log Out"} color={c.danger} onPress={() => { logout(); }} />
-        <View style={styles.utilRow}>
-          <Button title={"Test notification"} onPress={() => { scheduleTestNotification(); }} />
-          <Button title={"Reset settings"} onPress={() => { resetConfig(); }} />
-        </View>
       </View>
 
       <Modal visible={sleepModal} transparent animationType="fade" onRequestClose={() => setSleepModal(false)}>
@@ -393,7 +389,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   navStatus: { fontSize: 14, color: c.textMuted },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   itemLabel: { fontSize: 16, color: c.text },
-  utilRow: { flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 14, flexWrap: "wrap" },
   exportBtns: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
   sleepBackdrop: { flex: 1, backgroundColor: c.backdrop, justifyContent: "center", padding: 24 },
   sleepCard: { backgroundColor: c.card, borderRadius: 14, padding: 20 },
