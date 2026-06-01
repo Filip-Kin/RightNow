@@ -15,6 +15,11 @@ import type { SleepSession } from "./sleepFill";
 export type { SleepSession };
 
 const SLEEP_PERM = { accessType: "read", recordType: "SleepSession" } as const;
+// Health Connect only exposes data from 30 days before the FIRST grant unless the
+// app also holds the history permission. Requested alongside sleep so a full-history
+// backfill can reach everything Health Connect actually holds (years, not 30 days).
+// Best-effort: sleep sync still runs if only this extra grant is missing.
+const HISTORY_PERM = { accessType: "read", recordType: "ReadHealthDataHistory" } as const;
 // Tagged so it's greppable in logcat (ReactNativeJS) while debugging on-device.
 const log = (...a: unknown[]) => console.warn("[health]", ...a);
 
@@ -49,6 +54,10 @@ function hasSleepRead(perms: { accessType: string; recordType: string }[]): bool
   return perms.some((p) => p.accessType === "read" && p.recordType === "SleepSession");
 }
 
+function hasHistory(perms: { accessType: string; recordType: string }[]): boolean {
+  return perms.some((p) => p.accessType === "read" && p.recordType === "ReadHealthDataHistory");
+}
+
 export async function hasSleepPermission(): Promise<boolean> {
   try {
     await ensureInit();
@@ -66,9 +75,14 @@ export async function requestSleepPermission(): Promise<boolean> {
   await ensureInit();
   const granted = await getGrantedPermissions();
   log("granted before request:", JSON.stringify(granted));
-  if (hasSleepRead(granted)) return true;
-  const result = await requestPermission([SLEEP_PERM]);
-  log("requestPermission result:", JSON.stringify(result));
+  // Re-prompt if EITHER grant is missing. Sleep was likely granted on a prior
+  // build before the history permission existed, so gating only on sleep would
+  // never surface the new history prompt to an existing user.
+  if (hasSleepRead(granted) && hasHistory(granted)) return true;
+  // Request history together with sleep so the OS shows both in one prompt. The
+  // history grant is optional: we gate only on sleep read being present.
+  const result = await requestPermission([SLEEP_PERM, HISTORY_PERM]);
+  log("requestPermission result:", JSON.stringify(result), "history granted:", hasHistory(result));
   return hasSleepRead(result);
 }
 
