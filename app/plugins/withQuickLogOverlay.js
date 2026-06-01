@@ -478,10 +478,10 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
   // resume doesn't re-trigger. JS calls this on launch/resume to push /log.
   @ReactMethod fun consumeLaunchRoute(promise: Promise) {
     try {
-      val act = currentActivity
+      val act = reactApplicationContext.currentActivity
       val intent = act?.intent
       val route = intent?.getStringExtra("rightnow.open")
-      if (intent != null) intent.removeExtra("rightnow.open")
+      intent?.removeExtra("rightnow.open")
       promise.resolve(route)
     } catch (e: Exception) { promise.resolve(null) }
   }
