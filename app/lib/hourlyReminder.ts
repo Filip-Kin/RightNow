@@ -28,7 +28,14 @@ const QuickLog: {
   disarm(): Promise<boolean>;
   canDrawOverlay(): Promise<boolean>;
   requestOverlayPermission(): Promise<boolean>;
+  consumeLaunchRoute(): Promise<string | null>;
 } | undefined = NativeModules.QuickLog;
+
+/** If the app was launched via the notification's "Open in app" action, returns
+ *  the route to open ("log") once, then clears it. */
+export async function consumeQuickLogLaunchRoute(): Promise<string | null> {
+  try { return (await QuickLog?.consumeLaunchRoute()) ?? null; } catch { return null; }
+}
 
 /** The notification text for an N-hour unlogged streak (kept for any JS-side use). */
 export function reminderBody(streak: number): string {

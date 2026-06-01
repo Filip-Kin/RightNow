@@ -1,5 +1,5 @@
 import "react-native-get-random-values"; // polyfill crypto.getRandomValues (must load before any crypto use)
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import "../global.css";
 import { useEffect } from "react";
 import { AppState } from "react-native";
@@ -7,24 +7,34 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useNotificationResponseHandler } from "@/lib/notification";
 import { restoreSession } from "@/lib/auth";
 import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
-import { refreshHourlyReminder } from "@/lib/hourlyReminder";
+import { refreshHourlyReminder, consumeQuickLogLaunchRoute } from "@/lib/hourlyReminder";
 import { startTaxonomyMirror, drainQuickLogQueue } from "@/lib/quickLog";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
   const c = useTheme();
+  const router = useRouter();
   useNotificationResponseHandler();
   useEffect(() => {
+    // Route to /log if launched via the notification's "Open in app" action.
+    async function checkLaunchRoute() {
+      if ((await consumeQuickLogLaunchRoute()) === "log") {
+        router.navigate("/");
+        setTimeout(() => router.push("/log"), 50);
+      }
+    }
     restoreSession();
     maybeSyncHealthOnForeground();
     refreshHourlyReminder();
     startTaxonomyMirror(); // keep the overlay's plaintext activity mirror fresh
     drainQuickLogQueue(); // sync any answers the overlay/watch queued while we were away
+    checkLaunchRoute();
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") {
         maybeSyncHealthOnForeground();
         refreshHourlyReminder();
         drainQuickLogQueue();
+        checkLaunchRoute();
       }
     });
     return () => sub.remove();

@@ -13,7 +13,6 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({ current, total })
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>{current}/{total}</Text>
       <View style={styles.progressBarContainer}>
         {showGaps ? (
           <View style={styles.gapsContainer}>
@@ -31,23 +30,23 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({ current, total })
           <View style={[styles.progressBar, { width: `${(current / total) * 100}%` }]} />
         )}
       </View>
+      <Text style={styles.text}>{current}/{total}</Text>
     </View>
   );
 };
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 6,
   },
   text: {
-    marginRight: 10,
     fontWeight: 'bold',
-    color: c.text,
+    color: c.textMuted,
+    fontSize: 12,
   },
   progressBarContainer: {
-    flex: 1,
+    alignSelf: 'stretch',
     height: 8,
     backgroundColor: c.track,
   },

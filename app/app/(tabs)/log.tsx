@@ -167,7 +167,7 @@ export default function Index() {
         >
           <Icon name="arrow-back" style={{ color: cursor === 0 ? c.textFaint : c.primary }} />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, paddingTop: 16 }}>
           <ProgressIndicator current={cursor} total={queue.length} />
         </View>
         <TouchableOpacity
@@ -316,9 +316,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   navRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
-    marginBottom: 4,
+    marginTop: 8,
+    marginBottom: 24,
   },
   navBtn: {
     width: 40,

@@ -108,8 +108,13 @@ object QuickLogScheduler {
     ensureChannel(ctx)
     // Tap -> start the overlay service directly (no activity = no focus steal).
     val tapPi = PendingIntent.getService(ctx, 1, Intent(ctx, QuickLogService::class.java), FLAGS)
-    // "Open in app" -> normal app launch (user explicitly chose to leave their app).
+    // "Open in app" -> launch the app and route to the submission screen. The extra
+    // is read by MainActivity/JS (see notification.ts) to push /log on launch.
     val openIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+    if (openIntent != null) {
+      openIntent.putExtra("rightnow.open", "log")
+      openIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
     val openPi = if (openIntent != null) PendingIntent.getActivity(ctx, 2, openIntent, FLAGS) else null
     val b = NotificationCompat.Builder(ctx, CHANNEL_ID)
       .setSmallIcon(ctx.applicationInfo.icon)
@@ -213,11 +218,15 @@ class QuickLogService : Service() {
   private var selectedActivityName: String = ""
   private var title: TextView? = null
   private var grid: GridLayout? = null
+  // Outstanding hours to log, newest first (the streak from quicklog-reminder.json).
+  // Each Calendar is the START of an elapsed hour block.
+  private var pending: MutableList<Calendar> = ArrayList()
+  private var stepIndex: Int = 0
 
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    if (rootView == null) showOverlay()
+    if (rootView == null) { buildPending(); showOverlay() }
     return START_NOT_STICKY
   }
 
@@ -230,12 +239,45 @@ class QuickLogService : Service() {
     } catch (e: Exception) { JSONArray() }
   }
 
+  // How many trailing hours are unlogged, per quicklog-reminder.json (streak0 +
+  // hours elapsed since t0). Min 1 so the overlay always logs at least this hour.
+  private fun pendingCount(): Int {
+    return try {
+      val f = docFile("quicklog-reminder.json")
+      if (!f.exists()) return 1
+      val o = JSONObject(f.readText())
+      val streak0 = o.optInt("streak0", 0)
+      val t0 = o.optLong("t0", System.currentTimeMillis())
+      val cap = o.optInt("cap", 24)
+      val elapsed = Math.max(0L, (System.currentTimeMillis() - t0) / 3600000L).toInt()
+      Math.max(1, Math.min(streak0 + elapsed, cap))
+    } catch (e: Exception) { 1 }
+  }
+
+  private fun buildPending() {
+    pending = ArrayList()
+    stepIndex = 0
+    val n = pendingCount()
+    for (i in 1..n) {
+      val c = Calendar.getInstance()
+      c.add(Calendar.HOUR_OF_DAY, -i) // -1 = the just-elapsed hour, then older
+      c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
+      pending.add(c)
+    }
+  }
+
+  private fun rangeLabelFor(c: Calendar): String {
+    val end = (c.get(Calendar.HOUR_OF_DAY) + 1) % 24
+    val start = c.get(Calendar.HOUR_OF_DAY)
+    fun fmt(h: Int) = (if (h < 10) "0" else "") + h + ":00"
+    return fmt(start) + " - " + fmt(end)
+  }
+
   private fun appendAnswer(activity: Int, feeling: Int?) {
     try {
-      val now = Calendar.getInstance()
-      now.add(Calendar.HOUR_OF_DAY, -1) // log the just-elapsed hour
-      val date = "" + now.get(Calendar.YEAR) + "-" + (now.get(Calendar.MONTH) + 1) + "-" + now.get(Calendar.DAY_OF_MONTH)
-      val hour = now.get(Calendar.HOUR_OF_DAY)
+      val c = if (stepIndex < pending.size) pending[stepIndex] else Calendar.getInstance().apply { add(Calendar.HOUR_OF_DAY, -1) }
+      val date = "" + c.get(Calendar.YEAR) + "-" + (c.get(Calendar.MONTH) + 1) + "-" + c.get(Calendar.DAY_OF_MONTH)
+      val hour = c.get(Calendar.HOUR_OF_DAY)
       val f = docFile("quicklog-queue.json")
       val arr = try { if (f.exists()) JSONArray(f.readText()) else JSONArray() } catch (e: Exception) { JSONArray() }
       val o = JSONObject()
@@ -247,25 +289,32 @@ class QuickLogService : Service() {
     } catch (e: Exception) {}
   }
 
+  // Record the current hour's answer; advance to the next outstanding hour, or
+  // finish (cancel notif + kick the headless drain) when all are done.
   private fun finishAnswer(activity: Int, feeling: Int?) {
     appendAnswer(activity, feeling)
-    try { NotificationManagerCompat.from(this).cancel(QuickLogScheduler.NOTIF_ID) } catch (e: Exception) {}
-    HeadlessKick.kick(applicationContext)
-    teardown()
+    stepIndex++
+    if (stepIndex < pending.size) {
+      selectedActivity = 0
+      selectedActivityName = ""
+      showActivities()
+    } else {
+      try { NotificationManagerCompat.from(this).cancel(QuickLogScheduler.NOTIF_ID) } catch (e: Exception) {}
+      HeadlessKick.kick(applicationContext)
+      teardown()
+    }
   }
 
   private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-  // The 24h range for the just-elapsed hour, e.g. "15:00 - 16:00".
-  private fun rangeLabel(): String {
-    val now = Calendar.getInstance()
-    val end = now.get(Calendar.HOUR_OF_DAY)
-    val start = (end + 23) % 24
-    fun fmt(h: Int) = (if (h < 10) "0" else "") + h + ":00"
-    return fmt(start) + " - " + fmt(end)
-  }
-
   private var cardInnerW: Int = 0 // px available for the grid inside the card padding
+
+  // Title for the current step: the hour range, plus "(2 of 3)" when catching up.
+  private fun stepTitle(): String {
+    val c = if (stepIndex < pending.size) pending[stepIndex] else Calendar.getInstance()
+    val label = rangeLabelFor(c)
+    return if (pending.size > 1) label + "  (" + (stepIndex + 1) + " of " + pending.size + ")" else label
+  }
 
   private fun makeButton(label: String, fillColor: Int, columns: Int): Button {
     val b = Button(this)
@@ -311,7 +360,6 @@ class QuickLogService : Service() {
     card.setOnClickListener { }
 
     val t = TextView(this)
-    t.text = "What are you doing? (" + rangeLabel() + ")"
     t.setTextColor(Color.WHITE)
     t.textSize = 18f
     t.setPadding(0, 0, 0, dp(12))
@@ -319,22 +367,7 @@ class QuickLogService : Service() {
     card.addView(t)
 
     val g = GridLayout(this)
-    g.columnCount = 2
     grid = g
-    val activities = readActivities()
-    for (i in 0 until activities.length()) {
-      val a = activities.optJSONObject(i) ?: continue
-      val idx = a.optInt("index", i)
-      val name = a.optString("name", "?")
-      val color = try { Color.parseColor(a.optString("color", "#888888")) } catch (e: Exception) { Color.GRAY }
-      val skipFeeling = a.optBoolean("skipFeeling", false)
-      val b = makeButton(name, color, 2)
-      b.setOnClickListener {
-        if (skipFeeling) finishAnswer(idx, null)
-        else { selectedActivity = idx; selectedActivityName = name; showFeelings() }
-      }
-      g.addView(b)
-    }
     val scroll = ScrollView(this)
     scroll.addView(g)
     card.addView(scroll)
@@ -353,12 +386,34 @@ class QuickLogService : Service() {
       PixelFormat.TRANSLUCENT
     )
     rootView = scrim
-    try { wm.addView(scrim, params) } catch (e: Exception) { teardown() }
+    try { wm.addView(scrim, params); showActivities() } catch (e: Exception) { teardown() }
+  }
+
+  // (Re)populate the grid with the activity choices for the current step.
+  private fun showActivities() {
+    val g = grid ?: return
+    title?.text = "What are you doing?  " + stepTitle()
+    g.removeAllViews()
+    g.columnCount = 2
+    val activities = readActivities()
+    for (i in 0 until activities.length()) {
+      val a = activities.optJSONObject(i) ?: continue
+      val idx = a.optInt("index", i)
+      val name = a.optString("name", "?")
+      val color = try { Color.parseColor(a.optString("color", "#888888")) } catch (e: Exception) { Color.GRAY }
+      val skipFeeling = a.optBoolean("skipFeeling", false)
+      val b = makeButton(name, color, 2)
+      b.setOnClickListener {
+        if (skipFeeling) finishAnswer(idx, null)
+        else { selectedActivity = idx; selectedActivityName = name; showFeelings() }
+      }
+      g.addView(b)
+    }
   }
 
   private fun showFeelings() {
     val g = grid ?: return
-    title?.text = "How are you feeling? (" + selectedActivityName + ")"
+    title?.text = selectedActivityName + " · feeling?  " + stepTitle()
     g.removeAllViews()
     g.columnCount = 3
     val labels = arrayOf("Terrible", "Poor", "Ok", "Neutral", "Good", "Great")
@@ -416,6 +471,19 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
       reactApplicationContext.startActivity(i)
       promise.resolve(true)
     } catch (e: Exception) { promise.resolve(false) }
+  }
+
+  // One-shot: if the activity was launched via the notification's "Open in app"
+  // action (extra rightnow.open=log), return that route and clear it so a later
+  // resume doesn't re-trigger. JS calls this on launch/resume to push /log.
+  @ReactMethod fun consumeLaunchRoute(promise: Promise) {
+    try {
+      val act = currentActivity
+      val intent = act?.intent
+      val route = intent?.getStringExtra("rightnow.open")
+      if (intent != null) intent.removeExtra("rightnow.open")
+      promise.resolve(route)
+    } catch (e: Exception) { promise.resolve(null) }
   }
 }
 `;
