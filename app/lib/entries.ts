@@ -546,3 +546,20 @@ export async function sync(onProgress?: (done: number, total: number) => void): 
         setSyncStatus(classifySyncError(e));
     }
 }
+
+/** Full two-way reconcile for the manual "Sync now": push EVERY local cell/note (not
+ *  just the in-memory dirty set, which is lost if the app was killed before a push) so
+ *  anything on this device but missing/edited on the server is uploaded; then reset the
+ *  incremental cursor so the pull returns EVERY server cell and merge by LWW. This
+ *  repairs gaps the cursor-based sync can't: cells whose received_at fell below the
+ *  cursor (a re-import that didn't bump received_at, or one that failed to decrypt on an
+ *  earlier pass) and local cells that were never successfully pushed. Server LWW
+ *  (updated_at) makes the re-push idempotent. */
+export async function fullResync(onProgress?: (done: number, total: number) => void): Promise<void> {
+    await loadStore();
+    for (const id in store) dirty.add(id);
+    for (const d in notes) noteDirty.add(d);
+    cursor = 0;
+    diskCursor = true;
+    await sync(onProgress);
+}

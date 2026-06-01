@@ -9,7 +9,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder, cancelDailyReminder } from "@/lib/notification";
 import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { logout, useAuth } from "@/lib/auth";
-import { sync, useSyncStatus, type SyncStatus } from "@/lib/entries";
+import { fullResync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
@@ -153,7 +153,7 @@ export default function Settings() {
         <TouchableOpacity
           style={[styles.syncBtn, syncState.status === "syncing" && styles.disabled]}
           disabled={syncState.status === "syncing"}
-          onPress={() => { sync(); }}
+          onPress={() => { fullResync(); }}
         >
           <Text style={styles.syncBtnText}>Sync now</Text>
         </TouchableOpacity>
