@@ -6,7 +6,7 @@
 // Every permission is skippable and can be redone from Settings. Gated by
 // config.deviceSetupDone.
 import { Redirect, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
@@ -47,15 +47,28 @@ export default function SetupScreen() {
   const [health, setHealth] = useState<StepState>("idle");
   const [hcAvailable, setHcAvailable] = useState(false);
   const [mode, setMode] = useState<ReminderMode>(getReminderMode());
+  // Sleep auto-fill can be granted any time, but the (heavy) full-history fill must
+  // wait until the initial download finishes so it doesn't race the sync. syncedRef
+  // mirrors `synced` for use in callbacks; fillPendingRef means "granted, fill is owed".
+  const syncedRef = useRef(false);
+  const fillPendingRef = useRef(false);
 
   // Kick off the first sync immediately; the user does the permission steps while
   // it downloads in the background.
   useEffect(() => {
     sync((done, total) => setProgress({ done, total }))
       .catch(() => {})
-      .finally(() => { setProgress(null); setSynced(true); });
+      .finally(() => { setProgress(null); syncedRef.current = true; setSynced(true); });
     isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false));
   }, []);
+
+  // When the download finishes, run any sleep fill the user already granted.
+  useEffect(() => {
+    if (synced && fillPendingRef.current) {
+      fillPendingRef.current = false;
+      void syncHealthSleep(Date.now(), { fullHistory: true });
+    }
+  }, [synced]);
 
   // Re-check the grantable permissions on mount AND whenever the app returns to the
   // foreground - so a permission the user toggled on a system settings screen flips
@@ -100,13 +113,15 @@ export default function SetupScreen() {
   }
   async function doHealth() {
     setHealth("busy");
-    config.healthSleepEnabled = true;
-    // Grant access and mark the step done on grant; run the (heavy) full-history fill
-    // in the BACKGROUND so it never blocks setup or races the data sync.
+    // Grant access right away (even mid-download); mark the step done on grant. The
+    // full-history fill runs in the background now if the download already finished,
+    // otherwise it's queued to run the moment it does (see the effect above).
     const granted = await requestSleepPermission();
-    if (!granted) { config.healthSleepEnabled = false; setHealth("idle"); return; }
+    if (!granted) { setHealth("idle"); return; }
+    config.healthSleepEnabled = true;
     setHealth("done");
-    void syncHealthSleep(Date.now(), { fullHistory: true });
+    if (syncedRef.current) void syncHealthSleep(Date.now(), { fullHistory: true });
+    else fillPendingRef.current = true;
   }
   async function chooseMode(m: ReminderMode) {
     setMode(m); // optimistic
@@ -170,8 +185,8 @@ export default function SetupScreen() {
               <Step
                 styles={styles} c={c}
                 icon="bedtime" title="Sleep auto-fill"
-                desc={synced ? "Let RightNow fill your sleeping hours from Health Connect." : "Available once your data finishes downloading."}
-                state={health} onPress={doHealth} cta="Enable & grant" disabled={!synced}
+                desc="Let RightNow fill your sleeping hours from Health Connect."
+                state={health} onPress={doHealth} cta="Enable & grant"
               />
             ) : null}
 
