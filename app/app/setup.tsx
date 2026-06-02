@@ -167,8 +167,8 @@ export default function SetupScreen() {
               <Step
                 styles={styles} c={c}
                 icon="bedtime" title="Sleep auto-fill"
-                desc="Let RightNow fill your sleeping hours from Health Connect."
-                state={health} onPress={doHealth} cta="Enable & grant"
+                desc={synced ? "Let RightNow fill your sleeping hours from Health Connect." : "Available once your data finishes downloading."}
+                state={health} onPress={doHealth} cta="Enable & grant" disabled={!synced}
               />
             ) : null}
 
@@ -249,7 +249,7 @@ export default function SetupScreen() {
 }
 
 function Step({
-  styles, c, icon, title, desc, state, onPress, cta,
+  styles, c, icon, title, desc, state, onPress, cta, disabled,
 }: {
   styles: ReturnType<typeof makeStyles>;
   c: Colors;
@@ -259,6 +259,7 @@ function Step({
   state: StepState;
   onPress: () => void;
   cta: string;
+  disabled?: boolean;
 }) {
   const done = state === "done";
   return (
@@ -271,7 +272,7 @@ function Step({
       {done ? (
         <Icon name="check-circle" style={{ color: c.successText }} />
       ) : (
-        <TouchableOpacity style={styles.cardBtn} disabled={state === "busy"} onPress={onPress}>
+        <TouchableOpacity style={[styles.cardBtn, disabled && styles.cardBtnDisabled]} disabled={state === "busy" || disabled} onPress={onPress}>
           {state === "busy" ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.cardBtnText}>{cta}</Text>}
         </TouchableOpacity>
       )}
@@ -292,6 +293,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: "700", color: c.text },
   cardDesc: { fontSize: 13, color: c.textMuted, marginTop: 3, lineHeight: 18 },
   cardBtn: { backgroundColor: c.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, minWidth: 96, alignItems: "center" },
+  cardBtnDisabled: { opacity: 0.4 },
   cardBtnText: { color: c.onPrimary, fontWeight: "700", fontSize: 13 },
   sectionLabel: { fontSize: 16, fontWeight: "bold", color: c.textBody, marginTop: 8, marginBottom: 10 },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" },

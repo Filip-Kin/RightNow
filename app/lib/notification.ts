@@ -125,9 +125,10 @@ setSyncStatusListener((status) => {
 function getPermissionStatus() {
   return Notifications.getPermissionsAsync().then((result) => {
     notificationStatePermission = result;
-    if (!result.granted && result.canAskAgain) {
-      requestNotificationPermissionsAsync();
-    } else if (result.granted && getConfig()?.dailyReminderEnabled !== false) {
+    // Do NOT auto-prompt on app start (ugly first-run UX). The setup screen and
+    // Settings request permission on an explicit user tap. Here we only reflect the
+    // current status and (re)schedule the daily reminder if it's already granted.
+    if (result.granted && getConfig()?.dailyReminderEnabled !== false) {
       scheduleDailyReminder();
     }
   });

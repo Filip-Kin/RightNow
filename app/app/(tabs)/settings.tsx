@@ -15,10 +15,10 @@ import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
-function syncText(s: SyncStatus, lastSyncAt: number): string {
+function syncText(s: SyncStatus, lastSyncAt: number, hour24: boolean): string {
   switch (s) {
     case "syncing": return "Syncing…";
-    case "ok": return lastSyncAt ? `Synced at ${new Date(lastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Synced";
+    case "ok": return lastSyncAt ? `Synced at ${new Date(lastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: !hour24 })}` : "Synced";
     case "offline": return "Offline - will retry when you're back online";
     case "error": return "Not syncing - your session may be invalid. Sign in again.";
     default: return "Not synced yet";
@@ -120,7 +120,7 @@ export default function Settings() {
         <View style={styles.syncDot}>
           <View style={[styles.dot, { backgroundColor: syncState.status === "ok" ? c.successText : syncState.status === "error" ? c.danger : c.textFaint }]} />
         </View>
-        <Text style={styles.syncText} numberOfLines={2}>{syncText(syncState.status, syncState.lastSyncAt)}</Text>
+        <Text style={styles.syncText} numberOfLines={2}>{syncText(syncState.status, syncState.lastSyncAt, config.hour24)}</Text>
         <TouchableOpacity
           style={[styles.syncBtn, !!syncProgress && styles.disabled]}
           disabled={!!syncProgress}

@@ -512,6 +512,8 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     setSyncStatus("syncing");
     try {
     await loadStore();
+    // eslint-disable-next-line no-console
+    console.warn(`[sync] start cursor=${cursor} storeSize=${Object.keys(store).length} dirty=${dirty.size}`);
     await push((sent, ptotal) => onProgress?.(sent, ptotal, "push"));
 
     const cfgId = configCellId(dek);
@@ -525,6 +527,8 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     let firstPage = true;
     while (hasMore) {
         const res = await trpc.entries.pull.query({ since: cursor || undefined });
+        // eslint-disable-next-line no-console
+        console.warn(`[sync] page since=${cursor} -> records=${res.records.length} total=${res.total} newCursor=${res.cursor} hasMore=${res.hasMore}`);
         if (firstPage) { grandTotal = res.total; onProgress?.(0, grandTotal, "pull"); firstPage = false; }
         let changed = false;
         for (const r of res.records) {
@@ -571,6 +575,8 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         await persist();
     }
     onProgress?.(processed, grandTotal, "pull");
+    // eslint-disable-next-line no-console
+    console.warn(`[sync] done processed=${processed} finalCursor=${cursor}`);
     setSyncStatus("ok");
     } catch (e) {
         // Surface the failure via status AND log the real cause (the status alone
