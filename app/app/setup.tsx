@@ -17,7 +17,7 @@ import { sync } from "@/lib/entries";
 import { requestNotificationPermissionsAsync, scheduleDailyReminder } from "@/lib/notification";
 import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { requestIgnoreBatteryOptimizations } from "@/lib/battery";
-import { isHealthAvailable } from "@/lib/health";
+import { isHealthAvailable, requestSleepPermission } from "@/lib/health";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { applyReminderMode, getReminderMode, type ReminderMode } from "@/lib/reminderMode";
 import { Icon, type IconName } from "@/components/Icon";
@@ -101,9 +101,12 @@ export default function SetupScreen() {
   async function doHealth() {
     setHealth("busy");
     config.healthSleepEnabled = true;
-    const r = await syncHealthSleep(Date.now(), { prompt: true, fullHistory: true });
-    if (r.ok) setHealth("done");
-    else { config.healthSleepEnabled = false; setHealth("idle"); }
+    // Grant access and mark the step done on grant; run the (heavy) full-history fill
+    // in the BACKGROUND so it never blocks setup or races the data sync.
+    const granted = await requestSleepPermission();
+    if (!granted) { config.healthSleepEnabled = false; setHealth("idle"); return; }
+    setHealth("done");
+    void syncHealthSleep(Date.now(), { fullHistory: true });
   }
   async function chooseMode(m: ReminderMode) {
     setMode(m); // optimistic
