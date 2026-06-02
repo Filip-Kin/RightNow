@@ -15,7 +15,7 @@ curl -fsS -X DELETE -H "$AUTH" "$API/tags/android-latest" >/dev/null 2>&1
 
 # Fresh release pointing at the built commit.
 RID=$(curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" \
-  -d '{"tag_name":"android-latest","target_commitish":"main","name":"Android test build","prerelease":true,"body":"Sideloadable debug-signed APKs, rebuilt from main on each android-apk run. RightNow.apk = phone (arm64-v8a, Pixel 9 Pro). RightNow-wear.apk = Wear OS companion (Pixel Watch 3)."}' \
+  -d '{"tag_name":"android-latest","target_commitish":"main","name":"Android test build","prerelease":true,"body":"Sideloadable release-signed APKs (EAS-managed upload key), rebuilt from main on each android-apk run. RightNow.apk = phone (arm64-v8a, Pixel 9 Pro). RightNow-wear.apk = Wear OS companion (Pixel Watch 3)."}' \
   "$API/releases" 2>/dev/null | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 if [ -z "$RID" ]; then echo "ERROR: could not create release"; exit 1; fi
 

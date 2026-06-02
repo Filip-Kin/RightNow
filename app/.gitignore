@@ -6,6 +6,9 @@ npm-debug.*
 *.p8
 *.p12
 *.key
+*.keystore
+credentials.json
+credentials/
 *.mobileprovision
 *.orig.*
 web-build/

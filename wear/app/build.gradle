@@ -18,21 +18,25 @@ android {
     versionName '1.0.0'
   }
 
+  // Sign with the EAS-managed upload key (same cert as the phone - required for Data
+  // Layer pairing), passed in by CI via RIGHTNOW_* env vars. Falls back to the AGP
+  // auto-debug key for local dev builds when those aren't set.
   signingConfigs {
     release {
-      // Same committed debug keystore the phone APK is signed with (shared cert is
-      // required for Data Layer pairing). Standard Android debug creds.
-      storeFile rootProject.file('../app/ci/debug.keystore')
-      storePassword 'android'
-      keyAlias 'androiddebugkey'
-      keyPassword 'android'
+      def ksPath = System.getenv('RIGHTNOW_KEYSTORE')
+      if (ksPath) {
+        storeFile file(ksPath)
+        storePassword System.getenv('RIGHTNOW_KEYSTORE_PASSWORD')
+        keyAlias System.getenv('RIGHTNOW_KEY_ALIAS')
+        keyPassword System.getenv('RIGHTNOW_KEY_PASSWORD')
+      }
     }
   }
 
   buildTypes {
     release {
       minifyEnabled false
-      signingConfig signingConfigs.release
+      signingConfig System.getenv('RIGHTNOW_KEYSTORE') ? signingConfigs.release : signingConfigs.debug
     }
   }
 

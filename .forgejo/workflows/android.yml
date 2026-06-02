@@ -12,11 +12,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build APK (release, debug-signed, arm64-v8a)
+      - name: Build APK (release-signed, arm64-v8a)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          set -eux
+          set -eu
           IMG="rightnow-android:${{ github.sha }}"
-          docker build -f Dockerfile.android -t "$IMG" .
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.android -t "$IMG" \
+            --secret id=ks_b64,env=ANDROID_KEYSTORE_BASE64 \
+            --secret id=ks_pass,env=ANDROID_KEYSTORE_PASSWORD \
+            --secret id=key_alias,env=ANDROID_KEY_ALIAS \
+            --secret id=key_pass,env=ANDROID_KEY_PASSWORD \
+            .
           mkdir -p out
           cid=$(docker create "$IMG")
           docker cp "$cid":/RightNow.apk out/RightNow.apk
