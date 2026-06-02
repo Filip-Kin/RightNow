@@ -68,16 +68,13 @@ export async function ensureConfig(): Promise<Config> {
 
 let config!: Config;
 let configLoading: Promise<Config> | null = AsyncStorage.getItem("config").then((value) => {
-  config = new Proxy(
-    parse(value),
-    configHandlers,
-  );
+  config = new Proxy(parse(value), configHandlers) as Config;
   configLoading = null;
   listeners.forEach((listener) => listener(config));
   return config;
 });
 
-const configHandlers: ProxyHandler<any> = {
+const configHandlers: ProxyHandler<object> = {
   get(target, p, receiver) {
     const obj = Reflect.get(target, p, receiver);
     if (typeof obj === "object" && obj !== null) {
@@ -98,10 +95,7 @@ function update() {
 }
 
 export function resetConfig() {
-  config = new Proxy(
-    parse(null),
-    configHandlers,
-  );
+  config = new Proxy(parse(null), configHandlers) as Config;
   update();
 }
 

@@ -58,7 +58,7 @@ function computeCellColor(e: LocalEntry | undefined, mode: ColorMode, emptyColor
 // re-render every row - only rows whose data, mode, note flag, hovered cell, or the
 // taxonomy (`activities`, compared by ref to refresh colors on edit) actually change.
 const DayGridRow = React.memo(function DayGridRow(props: {
-  row: DayRow; dayIndex: number; styles: any; mode: ColorMode; activities: ActivityDef[];
+  row: DayRow; dayIndex: number; styles: ReturnType<typeof makeStyles>; mode: ColorMode; activities: ActivityDef[];
   emptyColor: string; shownHour: number; hasNote: boolean;
   onCell: (dayIdx: number, row: DayRow, h: number, e?: LocalEntry) => void;
   onHoverIn: (date: string, hour: number, e?: LocalEntry) => void;

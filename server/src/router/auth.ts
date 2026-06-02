@@ -6,15 +6,17 @@ import { db } from '../db';
 import { usersTable } from '../schema/users';
 import { userKeysTable } from '../schema/user-keys';
 import { tokensTable } from '../schema/tokens';
-import { protectedProcedure, publicProcedure, router } from '../trpc';
+import { protectedProcedure, publicProcedure, router, hashToken } from '../trpc';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export async function mintToken(userId: string, kind: 'session' | 'recovery', ip: string) {
+export async function mintToken(userId: string, kind: 'session', ip: string) {
     const token = randomBytes(32).toString('hex');
+    // Persist only SHA-256(token); the raw token is returned to the client and
+    // never stored, so a token-table leak can't be replayed.
     await db.insert(tokensTable).values({
         user_id: userId,
-        token,
+        token: hashToken(token),
         kind,
         ip_address: ip,
         expires_at: new Date(Date.now() + SESSION_TTL_MS),
@@ -42,7 +44,7 @@ export const authRouter = router({
             wrappedDekPw: z.string().max(2048).optional(),
             wrappedDekPwNonce: z.string().max(512).optional(),
         }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             const emailTaken = (await db.select({ id: usersTable.id }).from(usersTable)
                 .where(eq(usersTable.email, input.email)))[0];
             if (emailTaken) throw new TRPCError({ code: 'CONFLICT', message: 'That email is already registered' });
@@ -52,26 +54,32 @@ export const authRouter = router({
                 .where(eq(usersTable.recovery_lookup, lookup)))[0];
             if (rcExisting) throw new TRPCError({ code: 'CONFLICT', message: 'Recovery code collision, please try again' });
 
-            const [user] = await db.insert(usersTable).values({
-                email: input.email,
-                recovery_lookup: lookup,
-                auth_hash: input.authTokenPw ? await Bun.password.hash(input.authTokenPw) : null,
-            }).returning({ id: usersTable.id });
-            await db.insert(userKeysTable).values({
-                user_id: user.id,
-                wrapped_dek_rc: input.wrappedDekRc,
-                wrapped_dek_rc_nonce: input.wrappedDekRcNonce,
-                wrapped_dek_pw: input.wrappedDekPw ?? null,
-                wrapped_dek_pw_nonce: input.wrappedDekPwNonce ?? null,
+            // One transaction: a crash between the two inserts must not leave an
+            // orphaned user with no key row (which signInWithCode/login would choke on).
+            const auth_hash = input.authTokenPw ? await Bun.password.hash(input.authTokenPw) : null;
+            const userId = await db.transaction(async (tx) => {
+                const [user] = await tx.insert(usersTable).values({
+                    email: input.email,
+                    recovery_lookup: lookup,
+                    auth_hash,
+                }).returning({ id: usersTable.id });
+                await tx.insert(userKeysTable).values({
+                    user_id: user.id,
+                    wrapped_dek_rc: input.wrappedDekRc,
+                    wrapped_dek_rc_nonce: input.wrappedDekRcNonce,
+                    wrapped_dek_pw: input.wrappedDekPw ?? null,
+                    wrapped_dek_pw_nonce: input.wrappedDekPwNonce ?? null,
+                });
+                return user.id;
             });
-            const token = await mintToken(user.id, 'session', '');
-            return { token, userId: user.id };
+            const token = await mintToken(userId, 'session', ctx.ip);
+            return { token, userId };
         }),
 
     // Sign in (any device) with the recovery code. Returns the recovery-wrapped DEK.
     signInWithCode: publicProcedure
         .input(z.object({ authTokenRc: z.string().max(512) }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             const lookup = recoveryLookup(input.authTokenRc);
             const user = (await db.select().from(usersTable)
                 .where(eq(usersTable.recovery_lookup, lookup)))[0];
@@ -79,7 +87,8 @@ export const authRouter = router({
 
             const keys = (await db.select().from(userKeysTable)
                 .where(eq(userKeysTable.user_id, user.id)))[0];
-            const token = await mintToken(user.id, 'session', '');
+            if (!keys) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid recovery code' });
+            const token = await mintToken(user.id, 'session', ctx.ip);
             return {
                 token,
                 userId: user.id,
@@ -117,7 +126,7 @@ export const authRouter = router({
             email: z.string().email().max(255),
             authTokenPw: z.string().max(512),
         }))
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             const user = (await db.select().from(usersTable)
                 .where(eq(usersTable.email, input.email)))[0];
             if (!user || !user.auth_hash || !(await Bun.password.verify(input.authTokenPw, user.auth_hash))) {
@@ -125,10 +134,12 @@ export const authRouter = router({
             }
             const keys = (await db.select().from(userKeysTable)
                 .where(eq(userKeysTable.user_id, user.id)))[0];
-            if (!keys.wrapped_dek_pw || !keys.wrapped_dek_pw_nonce) {
-                throw new TRPCError({ code: 'UNAUTHORIZED', message: 'No password backup on this account' });
+            // Same generic message as a bad password: don't reveal whether the email
+            // exists or whether it carries a password backup.
+            if (!keys || !keys.wrapped_dek_pw || !keys.wrapped_dek_pw_nonce) {
+                throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials' });
             }
-            const token = await mintToken(user.id, 'session', '');
+            const token = await mintToken(user.id, 'session', ctx.ip);
             return {
                 token,
                 userId: user.id,

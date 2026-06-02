@@ -234,13 +234,20 @@ export default function Settings() {
           </TouchableOpacity>
         ))}
       </View>
-      <View style={[styles.sleepRow, { marginTop: 12 }]}>
-        <Text style={styles.sleepDesc}>24-hour time</Text>
-        <Switch
-          value={config.hour24}
-          onValueChange={(v) => { config.hour24 = v; }}
-          trackColor={{ true: c.primary, false: c.border }}
-        />
+      <Text style={styles.label}>Time format</Text>
+      <View style={styles.segment}>
+        {[
+          { value: false, label: "12-hour" },
+          { value: true, label: "24-hour" },
+        ].map((o) => (
+          <TouchableOpacity
+            key={o.label}
+            style={[styles.segItem, config.hour24 === o.value && styles.segItemActive]}
+            onPress={() => { config.hour24 = o.value; }}
+          >
+            <Text style={[styles.segText, config.hour24 === o.value && styles.segTextActive]}>{o.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       <Text style={styles.label}>Data</Text>

@@ -3,21 +3,21 @@ import { protectedProcedure, publicProcedure, router } from '../trpc';
 import { mintToken } from './auth';
 
 // Ephemeral device-link relay for QR cross-device sign-in. One device shows a QR
-// (its ephemeral X25519 public key + a random channel id); the other scans it.
-// Whichever device is already signed in is the "giver": it derives a shared secret
-// (ECDH) and seals {session token, DEK} for the new device. The relay only ever
-// carries opaque ciphertext + public keys it cannot turn into the shared secret, so
-// the zero-knowledge guarantee holds. Direction-agnostic so the phone can always be
-// the scanner and the web the display, whichever one is the signed-in device:
-//   - scanner is the giver  -> one deposit {scannerPubKey, ciphertext}, shower reads it
-//   - shower is the giver    -> scanner deposits {scannerPubKey}, shower adds {ciphertext}
+// carrying a one-time key (OTK) + a random channel id; the other scans it. Whichever
+// device is already signed in is the "giver": it seals {session token, DEK} under
+// the OTK and deposits the ciphertext. The relay only ever carries opaque ciphertext
+// (and a "scanner is here" flag) - it never sees the OTK, which travels only in the
+// QR, so it can neither read nor MITM the handoff. Direction-agnostic so the phone
+// can always be the camera, whichever device is the signed-in one:
+//   - scanner is the giver -> giver deposits {ciphertext}; shower (receiver) reads it
+//   - shower is the giver   -> scanner (receiver) deposits {scannerReady}; giver adds {ciphertext}
 //
 // In memory (single instance, intentionally throwaway): a restart just means "scan
 // again". Channel id is a 256-bit capability; records live at most LINK_TTL_MS.
 const LINK_TTL_MS = 2 * 60 * 1000;
 
 interface LinkRecord {
-    scannerPubKey?: string; // hex
+    scannerReady?: boolean;
     ciphertext?: string;
     nonce?: string; // hex
     expiresAt: number;
@@ -36,23 +36,23 @@ export const linkRouter = router({
     // Authenticated (giver) device: mint a fresh session token for the device being
     // linked, so each device has its own independently-revocable session.
     newSession: protectedProcedure.mutation(async ({ ctx }) => {
-        const token = await mintToken(ctx.session.userId, 'session', '');
+        const token = await mintToken(ctx.session.userId, 'session', ctx.ip);
         return { token, userId: ctx.session.userId };
     }),
 
     // Merge fields into a channel (create on first write). Either device may deposit:
-    // the scanner posts its public key, the giver posts the sealed bundle.
+    // the receiving scanner posts a presence flag, the giver posts the sealed bundle.
     deposit: publicProcedure
         .input(z.object({
             channelId: hex(128),
-            scannerPubKey: hex(128).optional(),
+            scannerReady: z.boolean().optional(),
             ciphertext: z.string().max(4096).optional(),
             nonce: hex(128).optional(),
         }))
         .mutation(async ({ input }) => {
             sweep();
             const rec = channels.get(input.channelId) ?? { expiresAt: 0 };
-            if (input.scannerPubKey) rec.scannerPubKey = input.scannerPubKey;
+            if (input.scannerReady) rec.scannerReady = true;
             if (input.ciphertext) { rec.ciphertext = input.ciphertext; rec.nonce = input.nonce; }
             rec.expiresAt = Date.now() + LINK_TTL_MS;
             channels.set(input.channelId, rec);
@@ -66,6 +66,6 @@ export const linkRouter = router({
             sweep();
             const rec = channels.get(input.channelId);
             if (!rec) return null;
-            return { scannerPubKey: rec.scannerPubKey, ciphertext: rec.ciphertext, nonce: rec.nonce };
+            return { scannerReady: rec.scannerReady, ciphertext: rec.ciphertext, nonce: rec.nonce };
         }),
 });

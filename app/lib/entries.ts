@@ -102,7 +102,10 @@ export async function loadStore(): Promise<void> {
         cursor = all.cursor;
     } catch (e) {
         // Don't hang the app if the DB can't open (e.g. a misconfigured web build);
-        // start empty - sync will try to repopulate from the server.
+        // start empty - sync will try to repopulate from the server. Log the real
+        // cause so a systemic DB failure is diagnosable instead of silently empty.
+        // eslint-disable-next-line no-console
+        console.error("[entries] DB load failed, starting empty:", e);
         store = {};
         notes = {};
         cursor = 0;
@@ -502,57 +505,69 @@ export async function sync(onProgress?: (done: number, total: number, phase?: "p
     await loadStore();
     await push((sent, ptotal) => onProgress?.(sent, ptotal, "push"));
 
-    const res = await trpc.entries.pull.query({ since: cursor || undefined });
     const cfgId = configCellId(dek);
-    const total = res.records.length;
-    onProgress?.(0, total, "pull");
-    let changed = false;
+    // Pull is paginated: loop until the server says there's nothing left. `total`
+    // (from the first page) is the full count to download, so the progress bar is
+    // accurate across pages. Each page is decrypted, merged (LWW), and persisted
+    // before the next, so an interrupted multi-page pull keeps what it got.
+    let grandTotal = 0;
     let processed = 0;
-    for (const r of res.records) {
-        processed++;
-        // Yield every so often so a big decrypt loop doesn't freeze the UI and the
-        // progress bar can repaint.
-        if (processed % 250 === 0) {
-            onProgress?.(processed, total, "pull");
-            await new Promise((resolve) => setTimeout(resolve, 0));
+    let hasMore = true;
+    let firstPage = true;
+    while (hasMore) {
+        const res = await trpc.entries.pull.query({ since: cursor || undefined });
+        if (firstPage) { grandTotal = res.total; onProgress?.(0, grandTotal, "pull"); firstPage = false; }
+        let changed = false;
+        for (const r of res.records) {
+            processed++;
+            // Yield every so often so a big decrypt loop doesn't freeze the UI and the
+            // progress bar can repaint.
+            if (processed % 250 === 0) {
+                onProgress?.(processed, grandTotal, "pull");
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            // The taxonomy config rides the same table as one reserved cell; route it.
+            if (r.cellId === cfgId) {
+                if (applyPulledConfig(dek, r)) changed = true;
+                continue;
+            }
+            let p: EntryPayload | NotePayload;
+            try {
+                p = openCell(dek, { ciphertext: r.ciphertext, nonce: r.nonce });
+            } catch {
+                continue; // skip undecryptable
+            }
+            if ("hour" in p) {
+                const existing = store[r.cellId];
+                if (existing && existing.updatedAt >= r.updatedAt) continue; // local newer or equal
+                store[r.cellId] = {
+                    date: p.date, hour: p.hour, activity: p.activity, feeling: p.feeling,
+                    source: p.source, updatedAt: r.updatedAt, deleted: r.deleted,
+                };
+                diskEntries.add(r.cellId);
+                changed = true;
+            } else {
+                const existing = notes[p.date];
+                if (existing && existing.updatedAt >= r.updatedAt) continue;
+                if (r.deleted || !p.note) delete notes[p.date];
+                else notes[p.date] = { text: p.note, updatedAt: r.updatedAt };
+                diskNotes.add(p.date);
+                changed = true;
+            }
         }
-        // The taxonomy config rides the same table as one reserved cell; route it.
-        if (r.cellId === cfgId) {
-            if (applyPulledConfig(dek, r)) changed = true;
-            continue;
-        }
-        let p: EntryPayload | NotePayload;
-        try {
-            p = openCell(dek, { ciphertext: r.ciphertext, nonce: r.nonce });
-        } catch {
-            continue; // skip undecryptable
-        }
-        if ("hour" in p) {
-            const existing = store[r.cellId];
-            if (existing && existing.updatedAt >= r.updatedAt) continue; // local newer or equal
-            store[r.cellId] = {
-                date: p.date, hour: p.hour, activity: p.activity, feeling: p.feeling,
-                source: p.source, updatedAt: r.updatedAt, deleted: r.deleted,
-            };
-            diskEntries.add(r.cellId);
-            changed = true;
-        } else {
-            const existing = notes[p.date];
-            if (existing && existing.updatedAt >= r.updatedAt) continue;
-            if (r.deleted || !p.note) delete notes[p.date];
-            else notes[p.date] = { text: p.note, updatedAt: r.updatedAt };
-            diskNotes.add(p.date);
-            changed = true;
-        }
+        cursor = res.cursor;
+        diskCursor = true;
+        hasMore = res.hasMore;
+        if (changed) emit();
+        await persist();
     }
-    cursor = res.cursor;
-    diskCursor = true;
-    onProgress?.(total, total, "pull");
-    if (changed) emit();
-    await persist();
+    onProgress?.(processed, grandTotal, "pull");
     setSyncStatus("ok");
     } catch (e) {
-        // Surface the failure via status; callers .catch() this no-op throw anyway.
+        // Surface the failure via status AND log the real cause (the status alone
+        // hides why a sync failed).
+        // eslint-disable-next-line no-console
+        console.error("[entries] sync failed:", e);
         setSyncStatus(classifySyncError(e));
     }
 }

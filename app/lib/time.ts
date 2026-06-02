@@ -26,7 +26,7 @@ export function useDate(sync: "hourly") {
       throw new Error("Invalid sync value");
     }
 
-    let timer: any | null = setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
       setDate(new Date());
       timer = null;
     }, target.getTime() - new Date().getTime() + 10);

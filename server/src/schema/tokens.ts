@@ -1,10 +1,9 @@
 import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
-// kind 'session'  -> normal access token (long-lived, ~7 days).
-// kind 'recovery' -> short-lived token minted by auth.recover, only authorizes
-//                    auth.resetPassword. Lets a user who forgot their password
-//                    rotate it after proving ownership via the recovery code.
+// kind 'session' -> normal access token (long-lived, ~7 days).
+// `token` stores SHA-256(token), never the raw token (see trpc.hashToken), so a
+// leaked tokens table can't be replayed.
 export const tokensTable = pgTable("tokens", {
     id: uuid().primaryKey().defaultRandom(),
     user_id: uuid().notNull().references(() => usersTable.id),

@@ -18,7 +18,6 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes, bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { utf8ToBytes, bytesToUtf8 } from "@noble/ciphers/utils.js";
-import { x25519 } from "@noble/curves/ed25519.js";
 
 // Argon2id parameters. Fixed for v1 (baked into the app); changing them later
 // requires storing per-user params server-side and a re-derivation path.
@@ -236,29 +235,23 @@ export const toHex = bytesToHex;
 export const fromHex = hexToBytes;
 
 // #region device link (QR cross-device sign-in)
-// Ephemeral X25519 key agreement so an already-signed-in device can hand the DEK
-// (+ a fresh session token) to a new device out-of-band. The new device shows its
-// public key in a QR; the approver does ECDH, seals the bundle, and relays the
-// ciphertext through the server, which can never derive the shared secret.
-export interface LinkKeypair {
-    secretKey: Uint8Array;
-    publicKey: Uint8Array;
-}
+// A one-time symmetric key (OTK) carried IN the QR, not any key exchange. The
+// device showing the QR generates a fresh 256-bit OTK + channel id; the signed-in
+// "giver" learns the OTK (it either generated it, or scanned it), seals the DEK
+// (+ a fresh session token) under the OTK, and relays only that ciphertext through
+// the server. The server never sees the OTK, so it has nothing to MITM - unlike an
+// ECDH exchange, there is no relayed public key it could swap. A photo of the QR is
+// only useful within the channel's short TTL by someone who can also reach the
+// relay; once the link completes / expires the blob is gone.
 
-export function generateLinkKeypair(): LinkKeypair {
-    const { secretKey, publicKey } = x25519.keygen();
-    return { secretKey, publicKey };
-}
-
-/** A fresh 256-bit channel id (hex) - the unguessable capability in the QR. */
+/** A fresh 256-bit channel id (hex) - the unguessable relay address in the QR. */
 export function randomChannelId(): string {
     return bytesToHex(randomBytes(32));
 }
 
-/** Derive the symmetric link key from our secret + the peer's public key (ECDH + HKDF). */
-export function linkSharedKey(secretKey: Uint8Array, peerPublicKey: Uint8Array): Uint8Array {
-    const shared = x25519.getSharedSecret(secretKey, peerPublicKey);
-    return hkdf(sha256, shared, new Uint8Array(0), utf8ToBytes("rightnow/device-link"), 32);
+/** A fresh 256-bit one-time link key (hex), carried in the QR and used to seal the bundle. */
+export function generateLinkKey(): string {
+    return bytesToHex(randomBytes(32));
 }
 
 export function sealWithKey(key: Uint8Array, obj: unknown): Sealed {

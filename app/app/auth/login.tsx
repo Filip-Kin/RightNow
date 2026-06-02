@@ -17,8 +17,9 @@ export default function LoginScreen() {
     setBusy("pw");
     try {
       await login(email.trim(), password);
-    } catch (e: any) {
-      setError(e?.message ?? "Could not sign in.");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Could not sign in.");
     } finally {
       setBusy(null);
     }
@@ -29,8 +30,9 @@ export default function LoginScreen() {
     setBusy("code");
     try {
       await signInWithCode(code);
-    } catch (e: any) {
-      setError(e?.message ?? "That recovery code didn't work.");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "That recovery code didn't work.");
     } finally {
       setBusy(null);
     }

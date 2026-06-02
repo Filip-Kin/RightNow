@@ -18,8 +18,9 @@ export default function SignupScreen() {
       await register(email.trim(), password || undefined);
       // Show + confirm the recovery code (root-level, outside the auth group).
       router.replace("/recovery-code");
-    } catch (e: any) {
-      setError(e?.message ?? "Could not create your account.");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Could not create your account.");
     } finally {
       setBusy(false);
     }

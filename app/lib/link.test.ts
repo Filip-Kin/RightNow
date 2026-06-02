@@ -1,24 +1,20 @@
 // Run: bun test lib/link.test.ts
 import { expect, test } from "bun:test";
-import { generateLinkKeypair, linkSharedKey, sealWithKey, openWithKey } from "./crypto";
+import { generateLinkKey, sealWithKey, openWithKey, fromHex } from "./crypto";
 
-test("device-link ECDH agrees both ways and seals round-trip", () => {
-  const a = generateLinkKeypair(); // shower
-  const b = generateLinkKeypair(); // scanner
-  const ka = linkSharedKey(a.secretKey, b.publicKey);
-  const kb = linkSharedKey(b.secretKey, a.publicKey);
-  expect(Buffer.from(ka).toString("hex")).toBe(Buffer.from(kb).toString("hex"));
+test("device-link OTK seals round-trip and yields a fresh 256-bit key", () => {
+  const otk = generateLinkKey(); // carried in the QR
+  expect(otk).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex
+  expect(generateLinkKey()).not.toBe(otk); // fresh each time
 
   const bundle = { token: "t0ken", userId: "u1", email: "x@y.z", dek: "deadbeef" };
-  const sealed = sealWithKey(ka, bundle);
-  expect(openWithKey(kb, sealed)).toEqual(bundle);
+  const sealed = sealWithKey(fromHex(otk), bundle);
+  expect(openWithKey(fromHex(otk), sealed)).toEqual(bundle);
 });
 
-test("a different key cannot open the bundle", () => {
-  const a = generateLinkKeypair();
-  const b = generateLinkKeypair();
-  const evil = generateLinkKeypair();
-  const sealed = sealWithKey(linkSharedKey(a.secretKey, b.publicKey), { dek: "secret" });
-  const wrong = linkSharedKey(evil.secretKey, a.publicKey);
-  expect(() => openWithKey(wrong, sealed)).toThrow();
+test("a different one-time key cannot open the bundle", () => {
+  const otk = generateLinkKey();
+  const evil = generateLinkKey();
+  const sealed = sealWithKey(fromHex(otk), { dek: "secret" });
+  expect(() => openWithKey(fromHex(evil), sealed)).toThrow();
 });

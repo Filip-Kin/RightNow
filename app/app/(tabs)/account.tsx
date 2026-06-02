@@ -31,8 +31,9 @@ export default function AccountScreen() {
       setCurrent(email.trim());
       setEmail(""); setPassword("");
       setMsg("Backup saved. You can now sign in with this email + password too.");
-    } catch (e: any) {
-      setError(e?.message ?? "Could not save backup.");
+    } catch (e) {
+      console.error(e);
+      setError(e instanceof Error ? e.message : "Could not save backup.");
     } finally {
       setBusy(false);
     }

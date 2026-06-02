@@ -8,6 +8,13 @@
       "when": 1780027253358,
       "tag": "0000_cloudy_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780100000000,
+      "tag": "0001_anonymous_auth",
+      "breakpoints": true
     }
   ]
 }

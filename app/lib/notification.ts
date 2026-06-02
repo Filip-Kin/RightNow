@@ -146,7 +146,7 @@ export function useNotificationGrantedState(): NotificationPermissionsStatus {
 
   const [value, update] = useState(notificationStatePermission);
   useEffect(() => {
-    const listener = (newValue: any) => update(newValue);
+    const listener = (newValue: NotificationPermissionsStatus) => update(newValue);
     listeners.add(listener);
     return () => void listeners.delete(listener);
   }, [update]);

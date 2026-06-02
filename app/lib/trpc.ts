@@ -34,5 +34,5 @@ export function setBaseUrl(url: string) {
 
 // Proxy so a rebuilt client (after setBaseUrl) is always used by callers.
 export const trpc = new Proxy({} as ReturnType<typeof build>, {
-    get: (_t, prop) => (client as any)[prop],
+    get: (_t, prop) => client[prop as keyof typeof client],
 });

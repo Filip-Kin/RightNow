@@ -34,7 +34,18 @@ export interface BackupFile {
   notes: BackupNote[];
 }
 
-/** Build the backup document from the decrypted store's contents. */
+/** Chronological compare for "YYYY-M-D" date strings (numeric per field, since the
+ *  parts aren't zero-padded so a lexical sort would misorder e.g. "2023-1-2"
+ *  vs "2023-10-1"). */
+function compareDate(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return ay - by || am - bm || ad - bd;
+}
+
+/** Build the backup document from the decrypted store's contents. Entries and notes
+ *  are emitted in chronological order (the in-memory store iterates in pull/insert
+ *  order, which looks random in the file), so a downloaded backup reads top-to-bottom. */
 export function serializeBackup(
   activities: ActivityDef[],
   entries: LocalEntry[],
@@ -46,10 +57,14 @@ export function serializeBackup(
     version: BACKUP_VERSION,
     exportedAt,
     activities,
-    entries: entries.map((e) => ({
-      date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source,
-    })),
-    notes: Object.entries(notes).map(([date, note]) => ({ date, note })),
+    entries: [...entries]
+      .sort((a, b) => compareDate(a.date, b.date) || a.hour - b.hour)
+      .map((e) => ({
+        date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source,
+      })),
+    notes: Object.entries(notes)
+      .sort(([a], [b]) => compareDate(a, b))
+      .map(([date, note]) => ({ date, note })),
   };
   return JSON.stringify(file, null, 2);
 }

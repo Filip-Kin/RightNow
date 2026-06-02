@@ -21,7 +21,8 @@ const SLEEP_PERM = { accessType: "read", recordType: "SleepSession" } as const;
 // Best-effort: sleep sync still runs if only this extra grant is missing.
 const HISTORY_PERM = { accessType: "read", recordType: "ReadHealthDataHistory" } as const;
 // Tagged so it's greppable in logcat (ReactNativeJS) while debugging on-device.
-const log = (...a: unknown[]) => console.warn("[health]", ...a);
+// Dev-only so a release build doesn't log permission/session detail to logcat.
+const log = (...a: unknown[]) => { if (__DEV__) console.warn("[health]", ...a); };
 
 let initialized = false;
 // Establishes the native HealthConnectClient. Throws a descriptive error (which
