@@ -53,10 +53,18 @@ Recommended, defensible answers:
 - **Do you provide a way for users to request data deletion?** → **Yes** (delete account / data
   in-app).
 
+- **Account creation methods** (select all that apply): **Username and password** — the email
+  is the username and the password (or, for password-less accounts, the recovery code) is the
+  credential. RightNow has no OAuth/SSO/2FA/OTP/biometric, so don't tick "other authentication."
+  (Email is **required** at signup; password is optional; a recovery code is always issued.)
+- **Delete account URL:** `https://rightnow.filipkin.com/delete-account`
+- **Can users delete some data without deleting the account?** → **Yes** — in the app you can clear
+  or edit any individual hour and delete any day note without deleting your account.
+
 Data types to declare:
 | Type | Collected? | Shared? | Purpose | Notes |
 |------|-----------|---------|---------|-------|
-| Personal info → **Email address** | Yes (optional) | No | Account management | Only if the user adds the email+password backup; optional |
+| Personal info → **Email address** | Yes (required) | No | Account management | Required at signup; used only to let you sign in |
 | Health & fitness → **Health info** (sleep) | Yes | No | App functionality | Read from Health Connect on-device; stored only as end-to-end-encrypted entries |
 
 Notes you can add in the free-text: "All logged data (hours, activities, moods, notes, and any

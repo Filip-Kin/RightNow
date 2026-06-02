@@ -4,6 +4,7 @@ import { entriesRouter } from './router/entries';
 import { linkRouter } from './router/link';
 import { createContext, router } from './trpc';
 import { PRIVACY_HTML } from './privacy';
+import { DELETE_ACCOUNT_HTML } from './deletePage';
 
 const appRouter = router({
     auth: authRouter,
@@ -86,6 +87,9 @@ Bun.serve({
         // in-app SPA route /privacy still handles client-side navigation.
         if (url.pathname === '/privacy' || url.pathname === '/privacy.html') {
             return new Response(PRIVACY_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        }
+        if (url.pathname === '/delete-account' || url.pathname === '/delete-account.html') {
+            return new Response(DELETE_ACCOUNT_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
         }
 
         // tRPC API under /api (both the web app and the native app call this).
