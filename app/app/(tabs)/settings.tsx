@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert, Modal } from "react-native";
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { scheduleDailyReminder, cancelDailyReminder } from "@/lib/notification";
-import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
+import { scheduleDailyReminder } from "@/lib/notification";
+import { applyReminderMode } from "@/lib/reminderMode";
 import { logout, useAuth } from "@/lib/auth";
 import { fullResync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
@@ -108,42 +107,7 @@ export default function Settings() {
     config.hourlyReminderEnabled ? "hourly" : config.dailyReminderEnabled ? "daily" : "off";
 
   async function setReminderMode(m: "off" | "daily" | "hourly") {
-    if (m !== "off") {
-      let perm = await Notifications.getPermissionsAsync();
-      if (!perm.granted && perm.canAskAgain) perm = await Notifications.requestPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert("Notifications are off", "Enable notifications for RightNow in your device settings to get reminders.");
-        return;
-      }
-    }
-    if (m === "daily") {
-      config.hourlyReminderEnabled = false;
-      await refreshHourlyReminder();
-      config.dailyReminderEnabled = true;
-      await scheduleDailyReminder(config.reminderHour);
-    } else if (m === "hourly") {
-      // The hourly nudge taps into a draw-over overlay (so your foreground app keeps
-      // focus); that needs the "draw over other apps" permission.
-      if (!(await canDrawOverlay())) {
-        Alert.alert(
-          "Allow the quick-log popup",
-          "Hourly check-in shows a quick-log popup over whatever you're doing, so you don't have to switch apps. Grant RightNow permission to draw over other apps?",
-          [
-            { text: "Not now", style: "cancel" },
-            { text: "Open setting", onPress: () => { void requestOverlayPermission(); } },
-          ],
-        );
-      }
-      config.dailyReminderEnabled = false;
-      await cancelDailyReminder();
-      config.hourlyReminderEnabled = true;
-      await refreshHourlyReminder();
-    } else {
-      config.dailyReminderEnabled = false;
-      config.hourlyReminderEnabled = false;
-      await cancelDailyReminder();
-      await refreshHourlyReminder();
-    }
+    await applyReminderMode(m);
   }
 
   return (
