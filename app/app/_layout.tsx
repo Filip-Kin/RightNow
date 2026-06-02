@@ -50,6 +50,7 @@ export default function RootLayout() {
         <Stack.Screen name="welcome" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="session-expired" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false }} />
         <Stack.Screen
           name="recovery-code"
           options={{ presentation: "modal", headerShown: false, gestureEnabled: false }}

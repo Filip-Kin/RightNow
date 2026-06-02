@@ -61,6 +61,7 @@ export default function LoginScreen() {
       )}
 
       <LinkButton title="Create an account" onPress={() => router.push("/auth/signup")} />
+      <LinkButton title="Privacy policy" onPress={() => router.push("/privacy")} />
     </AuthScreen>
   );
 }

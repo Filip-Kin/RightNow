@@ -248,6 +248,12 @@ export default function Settings() {
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/privacy")}>
+        <Icon name="lock" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Privacy policy</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
+
       <View style={styles.spacer} />
       <View style={styles.account}>
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
