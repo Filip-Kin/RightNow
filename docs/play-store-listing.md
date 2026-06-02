@@ -152,6 +152,19 @@ Good for one-off checks; the Internal testing track above is the proper path.
 
 ---
 
+## Wear OS companion
+The build now also produces **`RightNow-wear.aab`** (same package + signing cert as the phone, so
+Data Layer pairing holds; its versionCode is in a separate band, phone code + 1,000,000, so it's
+unique across form factors as Play requires).
+
+To publish the watch app: in the SAME Play app, open the **Wear OS** form-factor track
+(`Testing/Production` shows a "Wear OS" tab; tracks are named like `wear:production` / `wear:beta`).
+Create a release there and upload `RightNow-wear.aab`. Play delivers it to watches via the wear app's
+`uses-feature android.hardware.type.watch`, independently of the phone track. Don't put the wear AAB
+in the phone release — it goes on the Wear OS track.
+
+For quick watch testing you can keep sideloading **`RightNow-wear.apk`** over wireless adb instead.
+
 ## Automating uploads later (EAS Submit)
 After the **first manual upload** (Google requires it before API uploads), you can automate:
 1. In Google Cloud, create a **service account**, grant it access in Play Console

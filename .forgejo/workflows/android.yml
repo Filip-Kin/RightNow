@@ -33,6 +33,7 @@ jobs:
           docker cp "$cid":/RightNow.apk out/RightNow.apk
           docker cp "$cid":/RightNow.aab out/RightNow.aab
           docker cp "$cid":/RightNow-wear.apk out/RightNow-wear.apk
+          docker cp "$cid":/RightNow-wear.aab out/RightNow-wear.aab
           docker rm "$cid"
           docker image rm "$IMG" || true
           ls -la out

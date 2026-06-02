@@ -13,8 +13,10 @@ android {
     // apps by identical applicationId + signing certificate. Mismatch = silent no-sync.
     applicationId 'com.filipkin.rightnow'
     minSdk 30
-    targetSdk 34
-    versionCode 1
+    targetSdk 35
+    // CI injects WEAR_VERSION_CODE (phone code + 1,000,000) so it's unique across form
+    // factors, as Play requires for a watch app sharing the phone's applicationId.
+    versionCode (System.getenv('WEAR_VERSION_CODE')?.toInteger() ?: 1)
     versionName '1.0.0'
   }
 

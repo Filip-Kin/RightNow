@@ -40,4 +40,12 @@ if [ -f out/RightNow-wear.apk ]; then
     || { echo "ERROR: wear asset upload failed"; exit 1; }
 fi
 
-echo "Published RightNow.apk + RightNow-wear.apk -> https://git.filipkin.com/filip/RightNow/releases/tag/android-latest"
+# Wear OS AAB (upload to the Play Console "Wear OS" form-factor track).
+if [ -f out/RightNow-wear.aab ]; then
+  curl -fsS -X POST -H "$AUTH" \
+    -F "attachment=@out/RightNow-wear.aab;filename=RightNow-wear.aab;type=application/octet-stream" \
+    "$API/releases/$RID/assets?name=RightNow-wear.aab" >/dev/null \
+    || { echo "ERROR: wear aab upload failed"; exit 1; }
+fi
+
+echo "Published phone + wear (APK + AAB) -> https://git.filipkin.com/filip/RightNow/releases/tag/android-latest"

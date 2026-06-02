@@ -66,32 +66,36 @@ RUN bunx --bun expo prebuild -p android --no-install
 # Phone build: sign the release with the EAS-managed upload key via AGP's injected
 # signing (no need to touch the prebuilt build.gradle). The keystore + passwords come
 # from BuildKit secret mounts, so they never land in an image layer or build history.
-# Produces BOTH a sideload APK and a Play AAB.
+# The Play AAB is built for ALL ABIs (Play does per-device delivery); the sideload APK
+# stays arm64-v8a only so direct installs to the Pixel are small + fast.
 WORKDIR /src/app/android
 RUN --mount=type=secret,id=ks_b64 --mount=type=secret,id=ks_pass \
     --mount=type=secret,id=key_alias --mount=type=secret,id=key_pass \
     --mount=type=cache,target=/root/.gradle \
       base64 -d /run/secrets/ks_b64 > /tmp/release.jks \
-      && ./gradlew assembleRelease bundleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -x lint \
-         -Pandroid.injected.signing.store.file=/tmp/release.jks \
-         -Pandroid.injected.signing.store.password="$(cat /run/secrets/ks_pass)" \
-         -Pandroid.injected.signing.key.alias="$(cat /run/secrets/key_alias)" \
-         -Pandroid.injected.signing.key.password="$(cat /run/secrets/key_pass)" \
-      && cp app/build/outputs/apk/release/app-release.apk /RightNow.apk \
+      && SIGN="-Pandroid.injected.signing.store.file=/tmp/release.jks -Pandroid.injected.signing.store.password=$(cat /run/secrets/ks_pass) -Pandroid.injected.signing.key.alias=$(cat /run/secrets/key_alias) -Pandroid.injected.signing.key.password=$(cat /run/secrets/key_pass)" \
+      && ./gradlew bundleRelease --no-daemon -x lint $SIGN \
+      && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -x lint $SIGN \
       && cp app/build/outputs/bundle/release/app-release.aab /RightNow.aab \
+      && cp app/build/outputs/apk/release/app-release.apk /RightNow.apk \
       && rm -f /tmp/release.jks
 
-# Wear OS companion APK: signed with the SAME release key (so it pairs with the phone
-# over the Data Layer). wear/app/build.gradle reads the keystore from RIGHTNOW_* env.
+# Wear OS companion: signed with the SAME release key (so it pairs with the phone over
+# the Data Layer). wear/app/build.gradle reads the keystore + versionCode from env.
+# Produces a sideload APK (wireless adb to the watch) and a Play AAB (Wear OS track).
+# The wear versionCode lives in its own band (+1,000,000) so it's unique across form
+# factors, as Play requires for a watch app sharing the phone's applicationId.
 WORKDIR /src/wear
 RUN --mount=type=secret,id=ks_b64 --mount=type=secret,id=ks_pass \
     --mount=type=secret,id=key_alias --mount=type=secret,id=key_pass \
     --mount=type=cache,target=/root/.gradle \
       base64 -d /run/secrets/ks_b64 > /tmp/release.jks \
-      && RIGHTNOW_KEYSTORE=/tmp/release.jks \
-         RIGHTNOW_KEYSTORE_PASSWORD="$(cat /run/secrets/ks_pass)" \
-         RIGHTNOW_KEY_ALIAS="$(cat /run/secrets/key_alias)" \
-         RIGHTNOW_KEY_PASSWORD="$(cat /run/secrets/key_pass)" \
-         gradle :app:assembleRelease --no-daemon -x lint \
+      && export RIGHTNOW_KEYSTORE=/tmp/release.jks \
+      && export RIGHTNOW_KEYSTORE_PASSWORD="$(cat /run/secrets/ks_pass)" \
+      && export RIGHTNOW_KEY_ALIAS="$(cat /run/secrets/key_alias)" \
+      && export RIGHTNOW_KEY_PASSWORD="$(cat /run/secrets/key_pass)" \
+      && export WEAR_VERSION_CODE=$(( ${VERSION_CODE:-1} + 1000000 )) \
+      && gradle :app:assembleRelease :app:bundleRelease --no-daemon -x lint \
       && cp app/build/outputs/apk/release/app-release.apk /RightNow-wear.apk \
+      && cp app/build/outputs/bundle/release/app-release.aab /RightNow-wear.aab \
       && rm -f /tmp/release.jks
