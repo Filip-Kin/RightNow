@@ -14,7 +14,7 @@ import * as Application from "expo-application";
 import { useAuth } from "@/lib/auth";
 import { useConfig } from "@/lib/config";
 import { sync } from "@/lib/entries";
-import { requestNotificationPermissionsAsync } from "@/lib/notification";
+import { requestNotificationPermissionsAsync, scheduleDailyReminder } from "@/lib/notification";
 import { refreshHourlyReminder, canDrawOverlay, requestOverlayPermission } from "@/lib/hourlyReminder";
 import { requestIgnoreBatteryOptimizations } from "@/lib/battery";
 import { isHealthAvailable } from "@/lib/health";
@@ -24,6 +24,12 @@ import { Icon, type IconName } from "@/components/Icon";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 type StepState = "idle" | "busy" | "done";
+
+function formatHour(hour: number, hour24: boolean): string {
+  if (hour24) return `${hour.toString().padStart(2, "0")}:00`;
+  const h = hour % 12 || 12;
+  return `${h}:00 ${hour < 12 ? "AM" : "PM"}`;
+}
 
 export default function SetupScreen() {
   const { status } = useAuth();
@@ -103,6 +109,11 @@ export default function SetupScreen() {
     setMode(m); // optimistic
     const ok = await applyReminderMode(m);
     if (!ok) setMode(getReminderMode()); // bailed (e.g. notifications denied) - revert
+  }
+  function setReminderHour(next: number) {
+    const hour = (next + 24) % 24;
+    config.reminderHour = hour;
+    void scheduleDailyReminder(hour);
   }
   function finish() {
     config.deviceSetupDone = true;
@@ -186,13 +197,26 @@ export default function SetupScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.segHint}>
-              {mode === "hourly"
-                ? "An hourly quick-log popup over whatever you're doing."
-                : mode === "daily"
-                  ? "One reminder a day to fill in your hours."
+            {mode === "daily" ? (
+              <View style={[styles.rowBetween, { marginTop: 14 }]}>
+                <Text style={styles.itemLabel}>Reminder time</Text>
+                <View style={styles.row}>
+                  <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour - 1)}>
+                    <Text style={styles.stepperText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.reminderValue}>{formatHour(config.reminderHour, config.hour24)}</Text>
+                  <TouchableOpacity style={styles.stepper} onPress={() => setReminderHour(config.reminderHour + 1)}>
+                    <Text style={styles.stepperText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.segHint}>
+                {mode === "hourly"
+                  ? "An hourly quick-log popup over whatever you're doing."
                   : "No reminders – log whenever you like."}
-            </Text>
+              </Text>
+            )}
 
             <Text style={styles.sectionLabel}>Time format</Text>
             <View style={styles.segment}>
@@ -276,6 +300,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   segText: { color: c.textBody, fontWeight: "600", fontSize: 14 },
   segTextActive: { color: c.onPrimary },
   segHint: { color: c.textMuted, fontSize: 13, marginTop: 8, marginBottom: 4, lineHeight: 18 },
+  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  itemLabel: { fontSize: 16, color: c.text },
+  row: { flexDirection: "row", alignItems: "center", gap: 16 },
+  stepper: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" },
+  stepperText: { color: c.onPrimary, fontSize: 24, fontWeight: "700", lineHeight: 26 },
+  reminderValue: { fontSize: 18, fontWeight: "600", color: c.text, minWidth: 90, textAlign: "center" },
   spacer: { height: 16 },
   finishBtn: { backgroundColor: c.primary, borderRadius: 10, paddingVertical: 14, alignItems: "center" },
   finishText: { color: c.onPrimary, fontWeight: "800", fontSize: 16 },

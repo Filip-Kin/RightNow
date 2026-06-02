@@ -497,7 +497,16 @@ function classifySyncError(e: unknown): SyncStatus {
 /** Push local changes, pull remote changes (LWW merge). Never throws; updates sync
  *  status. `onProgress(done,total)` reports the pull+decrypt phase (the slow part on
  *  a fresh device) so a sign-in screen can show a download bar. */
-export async function sync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
+// Coalesce concurrent callers so a sign-in that mounts several screens (index then
+// setup, etc.) downloads the data ONCE, not once per screen. Extra callers get the
+// in-flight promise; their onProgress is ignored (the first caller drives the bar).
+let syncInFlight: Promise<void> | null = null;
+export function sync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = runSync(onProgress).finally(() => { syncInFlight = null; });
+    return syncInFlight;
+}
+async function runSync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
     const dek = getDEK();
     if (!dek) return;
     setSyncStatus("syncing");
