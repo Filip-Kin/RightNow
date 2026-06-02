@@ -2,8 +2,9 @@
 // is signed in hands over a fresh session + the DEK (see lib/auth startShowLink /
 // startScanLink). Defaults to "show" on web and "scan" on native, matching the
 // natural "phone scans, web displays" flow, but either is available on both.
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import QRCode from "react-native-qrcode-svg";
 import { QrScanner } from "@/components/QrScanner";
 import { startScanLink, startShowLink, type ShowLink } from "@/lib/auth";
@@ -19,7 +20,24 @@ export function LinkDevice() {
   const [status, setStatus] = useState("");
   const [done, setDone] = useState<Done | null>(null);
   const scanLockRef = useRef(false);
+  const scanPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [focused, setFocused] = useState(true);
   const checkScale = useRef(new Animated.Value(0)).current;
+
+  // This screen lives in the tab navigator and stays mounted, so a completed link
+  // (the green check) would otherwise still be showing when you come back. Reset to a
+  // fresh QR on every focus, and stop polling on blur.
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    setDone(null);
+    setStatus("");
+    setQr(null);
+    scanLockRef.current = false;
+    return () => {
+      setFocused(false);
+      if (scanPollRef.current) { clearInterval(scanPollRef.current); scanPollRef.current = null; }
+    };
+  }, []));
 
   // Spring the green checkmark in when the link completes (the QR is gone by then,
   // so it reads as the code turning into a check in the same spot).
@@ -29,9 +47,10 @@ export function LinkDevice() {
     Animated.spring(checkScale, { toValue: 1, friction: 4, tension: 90, useNativeDriver: Platform.OS !== "web" }).start();
   }, [done]);
 
-  // Show mode: open a channel and poll until the other device acts.
+  // Show mode: open a channel and poll until the other device acts. Gated on focus so
+  // it restarts with a fresh QR when you return and stops when you leave.
   useEffect(() => {
-    if (mode !== "show" || done) return;
+    if (!focused || mode !== "show" || done) return;
     let alive = true;
     const sl: ShowLink = startShowLink();
     setQr(sl.qrValue);
@@ -46,7 +65,7 @@ export function LinkDevice() {
       } catch { /* transient; keep polling */ }
     }, 1500);
     return () => { alive = false; clearInterval(id); };
-  }, [mode, done]);
+  }, [focused, mode, done]);
 
   async function handleScan(value: string) {
     if (scanLockRef.current) return;
@@ -55,13 +74,15 @@ export function LinkDevice() {
     try {
       const sl = await startScanLink(value);
       if (sl.status !== "pending") { setDone(sl.status); return; }
-      // Receiver: our key is posted; poll for the giver's sealed bundle.
+      // Receiver: our key is posted; poll for the giver's sealed bundle. Track the
+      // interval so leaving the screen (blur) stops it.
       const id = setInterval(async () => {
         try {
           const r = await sl.poll!();
-          if (r === "linked") { setDone("linked"); clearInterval(id); }
+          if (r === "linked") { setDone("linked"); clearInterval(id); scanPollRef.current = null; }
         } catch { /* keep polling */ }
       }, 1500);
+      scanPollRef.current = id;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Link failed.");
       scanLockRef.current = false; // allow another scan

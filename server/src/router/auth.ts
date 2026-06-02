@@ -6,6 +6,7 @@ import { db } from '../db';
 import { usersTable } from '../schema/users';
 import { userKeysTable } from '../schema/user-keys';
 import { tokensTable } from '../schema/tokens';
+import { entriesTable } from '../schema/entries';
 import { protectedProcedure, publicProcedure, router, hashToken } from '../trpc';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -163,6 +164,20 @@ export const authRouter = router({
 
     logout: protectedProcedure.mutation(async ({ ctx }) => {
         await db.delete(tokensTable).where(eq(tokensTable.id, ctx.session.tokenId));
+        return { ok: true };
+    }),
+
+    // Permanently delete the account and ALL its server-side data. Irreversible. The
+    // client wipes its local store separately. Children (entries/tokens/keys) are
+    // deleted before the user row to satisfy the foreign keys, all in one transaction.
+    deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+        const uid = ctx.session.userId;
+        await db.transaction(async (tx) => {
+            await tx.delete(entriesTable).where(eq(entriesTable.user_id, uid));
+            await tx.delete(tokensTable).where(eq(tokensTable.user_id, uid));
+            await tx.delete(userKeysTable).where(eq(userKeysTable.user_id, uid));
+            await tx.delete(usersTable).where(eq(usersTable.id, uid));
+        });
         return { ok: true };
     }),
 });

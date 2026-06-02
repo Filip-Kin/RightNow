@@ -176,6 +176,13 @@ export async function addEmailPasswordBackup(email: string, password: string): P
     await secureSet(K.email, email.trim());
 }
 
+/** Permanently delete the account + all server-side data, then sign out locally.
+ *  Irreversible; callers should confirm first. */
+export async function deleteAccount(): Promise<void> {
+    await trpc.auth.deleteAccount.mutate();
+    await logout(); // wipes local store/keys + sets unauthenticated (server token is already gone)
+}
+
 export async function logout(): Promise<void> {
     try {
         await trpc.auth.logout.mutate();
