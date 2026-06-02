@@ -126,7 +126,10 @@ class QuickLogActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
               )
             }
-            val frows = (0 until FEELINGS.size).toList().chunked(2)
+            // Picker display order: most-likely moods on top. Stored value is still the
+            // FEELINGS index (0..5); only the layout order changes. Rows: Ok/Neutral,
+            // Poor/Good, Terrible/Great.
+            val frows = listOf(2, 3, 1, 4, 0, 5).chunked(2)
             items(frows.size) { r ->
               val row = frows[r]
               Row(

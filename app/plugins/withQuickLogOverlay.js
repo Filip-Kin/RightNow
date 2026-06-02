@@ -458,11 +458,12 @@ class QuickLogService : Service() {
     val g = grid ?: return
     title?.text = stepTitle(selectedActivityName + " - feeling?")
     g.removeAllViews()
-    g.columnCount = 3
+    g.columnCount = 2
     val labels = arrayOf("Terrible", "Poor", "Ok", "Neutral", "Good", "Great")
-    for (i in labels.indices) {
-      val b = makeButton(labels[i], Color.parseColor("#3a3a3c"), 3)
-      val feeling = i
+    // Picker display order: most-likely moods on top (matches the watch 2x3 grid).
+    // Stored feeling value is the label index (0..5); only the layout order changes.
+    for (feeling in intArrayOf(2, 3, 1, 4, 0, 5)) {
+      val b = makeButton(labels[feeling], Color.parseColor("#3a3a3c"), 2)
       b.setOnClickListener { finishAnswer(selectedActivity, feeling) }
       g.addView(b)
     }
