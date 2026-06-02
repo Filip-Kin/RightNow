@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { and, asc, count, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, or, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { entriesTable } from '../schema/entries';
 import { protectedProcedure, router } from '../trpc';
@@ -51,54 +51,55 @@ export const entriesRouter = router({
             return { ok: true, count: rows.length };
         }),
 
-    // Incremental, paginated sync. Returns up to PULL_LIMIT records whose server
-    // receipt time is after the given cursor (epoch ms), the new cursor to pass
-    // next time, `hasMore` (loop until false), and `total` (full matching count,
-    // so the client can show an accurate download progress bar).
+    // Incremental, paginated sync via a (received_at, id) KEYSET cursor. A single
+    // push stamps every row in its batch with the same received_at, so a received_at
+    // alone can't disambiguate within a batch; the id tie-breaker lets pages be full
+    // PULL_LIMIT chunks with no row dropped or re-fetched (fast even when an import
+    // packed thousands of cells into a few seconds). Returns the next (cursor,
+    // cursorId) to pass back, `hasMore`, and `total` (computed only on the first page
+    // - since === undefined - so we don't COUNT on every page).
     pull: protectedProcedure
-        .input(z.object({ since: z.number().int().nonnegative().optional() }))
+        .input(z.object({
+            since: z.number().int().nonnegative().optional(),
+            sinceId: z.string().max(64).optional(),
+        }))
         .query(async ({ ctx, input }) => {
-            const where = input.since !== undefined
-                ? and(eq(entriesTable.user_id, ctx.session.userId), gt(entriesTable.received_at, new Date(input.since)))
-                : eq(entriesTable.user_id, ctx.session.userId);
+            const mine = eq(entriesTable.user_id, ctx.session.userId);
+            const where = input.since === undefined
+                ? mine
+                : and(mine, or(
+                    gt(entriesTable.received_at, new Date(input.since)),
+                    input.sinceId
+                        ? and(eq(entriesTable.received_at, new Date(input.since)), gt(entriesTable.id, input.sinceId))
+                        : sql`false`,
+                ));
 
-            const [{ value: total }] = await db.select({ value: count() }).from(entriesTable).where(where);
+            const total = input.since === undefined
+                ? (await db.select({ value: count() }).from(entriesTable).where(mine))[0].value
+                : -1;
 
-            // Order by (received_at, id) for a stable page boundary.
             const rows = await db.select().from(entriesTable)
                 .where(where)
                 .orderBy(asc(entriesTable.received_at), asc(entriesTable.id))
                 .limit(PULL_LIMIT);
 
-            // The cursor is a received_at (ms); a single push stamps every row in the
-            // batch with the same received_at. If a page ends mid-group, advancing the
-            // cursor past that received_at would skip the rest of the group. So when the
-            // page is full, drop the trailing rows sharing the max received_at - they
-            // come back on the next page (group size <= push cap 500 < PULL_LIMIT, so
-            // this always leaves progress).
-            let pageRows = rows;
-            let hasMore = false;
-            if (rows.length === PULL_LIMIT) {
-                hasMore = true;
-                const maxMs = rows[rows.length - 1].received_at.getTime();
-                const firstAtMax = rows.findIndex((r) => r.received_at.getTime() === maxMs);
-                if (firstAtMax > 0) pageRows = rows.slice(0, firstAtMax);
-            }
+            const hasMore = rows.length === PULL_LIMIT;
+            const last = rows[rows.length - 1];
+            const records = rows.map((r) => ({
+                cellId: r.cell_id,
+                ciphertext: r.ciphertext,
+                nonce: r.nonce,
+                deleted: r.deleted,
+                updatedAt: r.updated_at.getTime(),
+                receivedAt: r.received_at.getTime(),
+            }));
 
-            let cursor = input.since ?? 0;
-            const records = pageRows.map((r) => {
-                const receivedAt = r.received_at.getTime();
-                if (receivedAt > cursor) cursor = receivedAt;
-                return {
-                    cellId: r.cell_id,
-                    ciphertext: r.ciphertext,
-                    nonce: r.nonce,
-                    deleted: r.deleted,
-                    updatedAt: r.updated_at.getTime(),
-                    receivedAt,
-                };
-            });
-
-            return { records, cursor, hasMore, total };
+            return {
+                records,
+                cursor: last ? last.received_at.getTime() : (input.since ?? 0),
+                cursorId: last ? last.id : (input.sinceId ?? ""),
+                hasMore,
+                total,
+            };
         }),
 });

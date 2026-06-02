@@ -60,13 +60,14 @@ interface EntryRow { cell_id: string; date: string; hour: number; activity: numb
 interface NoteRow { date: string; text: string; updated_at: number }
 
 /** Read the entire store into memory (called once on start). */
-export async function dbLoadAll(): Promise<{ entries: DbEntry[]; notes: DbNote[]; cursor: number }> {
+export async function dbLoadAll(): Promise<{ entries: DbEntry[]; notes: DbNote[]; cursor: number; cursorId: string }> {
   const db = await getDb();
   const erows = await db.getAllAsync<EntryRow>(
     "SELECT cell_id, date, hour, activity, feeling, source, updated_at, deleted FROM entries",
   );
   const nrows = await db.getAllAsync<NoteRow>("SELECT date, text, updated_at FROM notes");
   const cur = await db.getFirstAsync<{ value: string }>("SELECT value FROM meta WHERE key = 'cursor'");
+  const curId = await db.getFirstAsync<{ value: string }>("SELECT value FROM meta WHERE key = 'cursorId'");
   return {
     entries: erows.map((r) => ({
       cellId: r.cell_id, date: r.date, hour: r.hour, activity: r.activity,
@@ -74,8 +75,14 @@ export async function dbLoadAll(): Promise<{ entries: DbEntry[]; notes: DbNote[]
     })),
     notes: nrows.map((r) => ({ date: r.date, text: r.text, updatedAt: r.updated_at })),
     cursor: cur ? Number(cur.value) : 0,
+    cursorId: curId?.value ?? "",
   };
 }
+
+// Multi-row upsert chunk size. Each entry binds 8 params, so 100 rows = 800 params,
+// comfortably under SQLite's variable limit. Batching turns ~1500 awaited single-row
+// INSERTs (a native round-trip each) into ~15 statements - the bulk-download speedup.
+const FLUSH_CHUNK = 100;
 
 /** Flush a batch of changes in one transaction. */
 export async function dbFlush(opts: {
@@ -83,18 +90,26 @@ export async function dbFlush(opts: {
   notes?: DbNote[];
   deleteNotes?: string[];
   cursor?: number | null;
+  cursorId?: string | null;
 }): Promise<void> {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    for (const e of opts.entries ?? []) {
+    const entries = opts.entries ?? [];
+    for (let i = 0; i < entries.length; i += FLUSH_CHUNK) {
+      const slice = entries.slice(i, i + FLUSH_CHUNK);
+      const placeholders = slice.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+      const params: (string | number | null)[] = [];
+      for (const e of slice) {
+        params.push(e.cellId, e.date, e.hour, e.activity, e.feeling, e.source, e.updatedAt, e.deleted ? 1 : 0);
+      }
       await db.runAsync(
         `INSERT INTO entries (cell_id, date, hour, activity, feeling, source, updated_at, deleted)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES ${placeholders}
          ON CONFLICT(cell_id) DO UPDATE SET
            date=excluded.date, hour=excluded.hour, activity=excluded.activity,
            feeling=excluded.feeling, source=excluded.source,
            updated_at=excluded.updated_at, deleted=excluded.deleted`,
-        [e.cellId, e.date, e.hour, e.activity, e.feeling, e.source, e.updatedAt, e.deleted ? 1 : 0],
+        params,
       );
     }
     for (const n of opts.notes ?? []) {
@@ -111,6 +126,12 @@ export async function dbFlush(opts: {
       await db.runAsync(
         "INSERT INTO meta (key, value) VALUES ('cursor', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [String(opts.cursor)],
+      );
+    }
+    if (opts.cursorId != null) {
+      await db.runAsync(
+        "INSERT INTO meta (key, value) VALUES ('cursorId', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [opts.cursorId],
       );
     }
   });

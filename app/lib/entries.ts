@@ -42,7 +42,8 @@ const HOUR_MS = 60 * 60 * 1000;
 
 let store: Record<string, LocalEntry> = {}; // cellId -> entry
 let notes: Record<string, LocalNote> = {}; // date "YYYY-M-D" -> note
-let cursor = 0; // server receivedAt cursor for incremental pull
+let cursor = 0; // server receivedAt cursor (ms) for incremental pull
+let cursorId = ""; // tie-breaker id for the keyset cursor (rows can share a received_at)
 const dirty = new Set<string>(); // entry cellIds with un-pushed local changes
 const noteDirty = new Set<string>(); // dates with un-pushed note changes
 // Disk-write queues, drained by persist(). Separate from `dirty`/`noteDirty`
@@ -83,7 +84,7 @@ async function persist() {
         if (n) noteUpserts.push({ date: d, text: n.text, updatedAt: n.updatedAt });
         else noteDeletes.push(d);
     }
-    await dbFlush({ entries, notes: noteUpserts, deleteNotes: noteDeletes, cursor: cflag ? cursor : null });
+    await dbFlush({ entries, notes: noteUpserts, deleteNotes: noteDeletes, cursor: cflag ? cursor : null, cursorId: cflag ? cursorId : null });
 }
 
 export async function loadStore(): Promise<void> {
@@ -100,6 +101,7 @@ export async function loadStore(): Promise<void> {
         notes = {};
         for (const n of all.notes) notes[n.date] = { text: n.text, updatedAt: n.updatedAt };
         cursor = all.cursor;
+        cursorId = all.cursorId;
     } catch (e) {
         // Don't hang the app if the DB can't open (e.g. a misconfigured web build);
         // start empty - sync will try to repopulate from the server. Log the real
@@ -109,6 +111,7 @@ export async function loadStore(): Promise<void> {
         store = {};
         notes = {};
         cursor = 0;
+        cursorId = "";
     }
     loaded = true;
     emit();
@@ -119,6 +122,7 @@ export async function clearStore(): Promise<void> {
     store = {};
     notes = {};
     cursor = 0;
+    cursorId = "";
     dirty.clear();
     noteDirty.clear();
     diskEntries.clear();
@@ -513,7 +517,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     try {
     await loadStore();
     // eslint-disable-next-line no-console
-    console.warn(`[sync] start cursor=${cursor} storeSize=${Object.keys(store).length} dirty=${dirty.size}`);
+    if (__DEV__) console.warn(`[sync] start cursor=${cursor} storeSize=${Object.keys(store).length} dirty=${dirty.size}`);
     await push((sent, ptotal) => onProgress?.(sent, ptotal, "push"));
 
     const cfgId = configCellId(dek);
@@ -526,9 +530,9 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     let hasMore = true;
     let firstPage = true;
     while (hasMore) {
-        const res = await trpc.entries.pull.query({ since: cursor || undefined });
+        const res = await trpc.entries.pull.query({ since: cursor || undefined, sinceId: cursorId || undefined });
         // eslint-disable-next-line no-console
-        console.warn(`[sync] page since=${cursor} -> records=${res.records.length} total=${res.total} newCursor=${res.cursor} hasMore=${res.hasMore}`);
+        if (__DEV__) console.warn(`[sync] page since=${cursor}/${cursorId} -> records=${res.records.length} total=${res.total} hasMore=${res.hasMore}`);
         if (firstPage) { grandTotal = res.total; onProgress?.(0, grandTotal, "pull"); firstPage = false; }
         let changed = false;
         for (const r of res.records) {
@@ -569,6 +573,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
             }
         }
         cursor = res.cursor;
+        cursorId = res.cursorId;
         diskCursor = true;
         hasMore = res.hasMore;
         if (changed) emit();
@@ -576,7 +581,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     }
     onProgress?.(processed, grandTotal, "pull");
     // eslint-disable-next-line no-console
-    console.warn(`[sync] done processed=${processed} finalCursor=${cursor}`);
+    if (__DEV__) console.warn(`[sync] done processed=${processed} finalCursor=${cursor}/${cursorId}`);
     setSyncStatus("ok");
     } catch (e) {
         // Surface the failure via status AND log the real cause (the status alone
@@ -602,6 +607,7 @@ export async function fullResync(onProgress?: (done: number, total: number, phas
     for (const id in store) dirty.add(id);
     for (const d in notes) noteDirty.add(d);
     cursor = 0;
+    cursorId = "";
     diskCursor = true;
     await sync(onProgress);
 }
