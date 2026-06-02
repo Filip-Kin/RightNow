@@ -22,6 +22,7 @@ jobs:
           set -eu
           IMG="rightnow-android:${{ github.sha }}"
           DOCKER_BUILDKIT=1 docker build -f Dockerfile.android -t "$IMG" \
+            --build-arg VERSION_CODE=${{ github.run_number }} \
             --secret id=ks_b64,env=ANDROID_KEYSTORE_BASE64 \
             --secret id=ks_pass,env=ANDROID_KEYSTORE_PASSWORD \
             --secret id=key_alias,env=ANDROID_KEY_ALIAS \
@@ -30,6 +31,7 @@ jobs:
           mkdir -p out
           cid=$(docker create "$IMG")
           docker cp "$cid":/RightNow.apk out/RightNow.apk
+          docker cp "$cid":/RightNow.aab out/RightNow.aab
           docker cp "$cid":/RightNow-wear.apk out/RightNow-wear.apk
           docker rm "$cid"
           docker image rm "$IMG" || true

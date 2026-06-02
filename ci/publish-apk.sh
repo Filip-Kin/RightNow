@@ -24,6 +24,14 @@ curl -fsS -X POST -H "$AUTH" \
   "$API/releases/$RID/assets?name=RightNow.apk" >/dev/null \
   || { echo "ERROR: asset upload failed"; exit 1; }
 
+# Play AAB (upload this to the Play Console internal-testing track).
+if [ -f out/RightNow.aab ]; then
+  curl -fsS -X POST -H "$AUTH" \
+    -F "attachment=@out/RightNow.aab;filename=RightNow.aab;type=application/octet-stream" \
+    "$API/releases/$RID/assets?name=RightNow.aab" >/dev/null \
+    || { echo "ERROR: aab upload failed"; exit 1; }
+fi
+
 # Wear OS companion APK (sideload to the Pixel Watch 3 over wireless ADB).
 if [ -f out/RightNow-wear.apk ]; then
   curl -fsS -X POST -H "$AUTH" \
