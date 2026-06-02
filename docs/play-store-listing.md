@@ -58,8 +58,10 @@ Recommended, defensible answers:
   credential. RightNow has no OAuth/SSO/2FA/OTP/biometric, so don't tick "other authentication."
   (Email is **required** at signup; password is optional; a recovery code is always issued.)
 - **Delete account URL:** `https://rightnow.filipkin.com/delete-account`
-- **Can users delete some data without deleting the account?** → **Yes** — in the app you can clear
-  or edit any individual hour and delete any day note without deleting your account.
+- **Can users delete some data without deleting the account?** → **Yes** — Settings → Delete data or
+  account → "Delete a date range" bulk-deletes the logged hours/notes between two dates.
+- **Delete data URL:** `https://rightnow.filipkin.com/delete-data` (same page; covers both the
+  range delete and full account deletion).
 
 Data types to declare:
 | Type | Collected? | Shared? | Purpose | Notes |

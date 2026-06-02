@@ -88,7 +88,8 @@ Bun.serve({
         if (url.pathname === '/privacy' || url.pathname === '/privacy.html') {
             return new Response(PRIVACY_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
         }
-        if (url.pathname === '/delete-account' || url.pathname === '/delete-account.html') {
+        if (url.pathname === '/delete-account' || url.pathname === '/delete-account.html'
+            || url.pathname === '/delete-data' || url.pathname === '/delete-data.html') {
             return new Response(DELETE_ACCOUNT_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
         }
 

@@ -384,6 +384,60 @@ export async function importNotes(items: { date: string; note: string }[]): Prom
     return n;
 }
 
+/** Chronological compare of two "YYYY-M-D" date strings (numeric per field). */
+function cmpDate(a: string, b: string): number {
+    const [ay, am, ad] = a.split("-").map(Number);
+    const [by, bm, bd] = b.split("-").map(Number);
+    return ay - by || am - bm || ad - bd;
+}
+
+/** How many non-deleted entries + notes fall within [start, end] (inclusive, "YYYY-M-D"). */
+export function countInRange(start: string, end: string): number {
+    let n = 0;
+    for (const id in store) {
+        const e = store[id];
+        if (!e.deleted && cmpDate(e.date, start) >= 0 && cmpDate(e.date, end) <= 0) n++;
+    }
+    for (const d in notes) {
+        if (notes[d].text && cmpDate(d, start) >= 0 && cmpDate(d, end) <= 0) n++;
+    }
+    return n;
+}
+
+/** Delete (tombstone) every entry and note whose date is within [start, end] inclusive.
+ *  Pushed with deleted=true (LWW) so other devices delete them too. Returns the count. */
+export async function deleteRange(start: string, end: string): Promise<number> {
+    const dek = getDEK();
+    if (!dek) throw new Error("Locked: no decryption key");
+    await loadStore();
+    const now = Date.now();
+    let n = 0;
+    for (const id in store) {
+        const e = store[id];
+        if (e.deleted) continue;
+        if (cmpDate(e.date, start) >= 0 && cmpDate(e.date, end) <= 0) {
+            store[id] = { ...e, deleted: true, updatedAt: now };
+            dirty.add(id);
+            diskEntries.add(id);
+            n++;
+        }
+    }
+    for (const d in notes) {
+        if (notes[d].text && cmpDate(d, start) >= 0 && cmpDate(d, end) <= 0) {
+            notes[d] = { text: "", updatedAt: now }; // empty text = deleted note (pushed as deleted)
+            noteDirty.add(d);
+            diskNotes.add(d);
+            n++;
+        }
+    }
+    if (n) {
+        emit();
+        await persist();
+        schedulePush();
+    }
+    return n;
+}
+
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePush() {
     if (pushTimer) return;

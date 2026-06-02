@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert, Modal, Platform } from "react-native";
+import { Text, StyleSheet, Button, ScrollView, View, TouchableOpacity, Switch, ActivityIndicator, Alert, Modal } from "react-native";
 import { useRouter } from "expo-router";
 import { useConfig, type ThemePref } from "@/lib/config";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,7 +7,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { scheduleDailyReminder } from "@/lib/notification";
 import { applyReminderMode } from "@/lib/reminderMode";
-import { logout, deleteAccount, useAuth } from "@/lib/auth";
+import { logout, useAuth } from "@/lib/auth";
 import { fullResync, useSyncStatus, type SyncStatus } from "@/lib/entries";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
@@ -108,27 +108,6 @@ export default function Settings() {
 
   async function setReminderMode(m: "off" | "daily" | "hourly") {
     await applyReminderMode(m);
-  }
-
-  async function confirmDeleteAccount() {
-    const ok = Platform.OS === "web"
-      ? (typeof window !== "undefined" && window.confirm(
-          "Permanently delete your account and all your data from the server? This cannot be undone."))
-      : await new Promise<boolean>((resolve) => Alert.alert(
-          "Delete account?",
-          "This permanently deletes your account and all your data from the server. It can't be undone - export a backup first if you want to keep your data.",
-          [
-            { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-            { text: "Delete", style: "destructive", onPress: () => resolve(true) },
-          ],
-        ));
-    if (!ok) return;
-    try {
-      await deleteAccount();
-    } catch (e) {
-      console.error(e);
-      Alert.alert("Couldn't delete account", e instanceof Error ? e.message : "Please try again.");
-    }
   }
 
   return (
@@ -275,15 +254,17 @@ export default function Settings() {
         <Icon name="chevron-right" style={{ color: c.textFaint }} />
       </TouchableOpacity>
 
+      <TouchableOpacity style={styles.navItem} onPress={() => router.push("/delete-data")}>
+        <Icon name="delete" style={{ color: c.danger }} />
+        <Text style={[styles.navText, { color: c.danger }]}>Delete data or account</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
+
       <View style={styles.spacer} />
       <View style={styles.account}>
         {email ? <Text style={styles.accountText}>Signed in as {email}</Text> : null}
         <Button title={"Log Out"} color={c.danger} onPress={() => { logout(); }} />
       </View>
-
-      <TouchableOpacity style={styles.deleteAccount} onPress={confirmDeleteAccount}>
-        <Text style={styles.deleteAccountText}>Delete account</Text>
-      </TouchableOpacity>
 
       <Modal visible={sleepModal} transparent animationType="fade" onRequestClose={() => setSleepModal(false)}>
         <View style={styles.sleepBackdrop}>
@@ -411,6 +392,4 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   spacer: { height: 28 },
   account: { marginTop: 28, paddingTop: 24, borderTopWidth: 1, borderTopColor: c.cardBorder },
   accountText: { fontSize: 14, color: c.textMuted, marginBottom: 8 },
-  deleteAccount: { marginTop: 20, alignItems: "center", paddingVertical: 12 },
-  deleteAccountText: { color: c.danger, fontSize: 14, fontWeight: "600" },
 });

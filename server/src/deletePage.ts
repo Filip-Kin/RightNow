@@ -21,15 +21,25 @@ export const DELETE_ACCOUNT_HTML = `<!DOCTYPE html>
 </head>
 <body>
 <main>
-<h1>Delete your RightNow account</h1>
-<p>RightNow (developer: Filip Kin) lets you permanently delete your account and all associated
-data directly in the app.</p>
+<h1>Delete your RightNow data</h1>
+<p>RightNow (developer: Filip Kin) lets you permanently delete some of your data, or your entire
+account and all associated data, directly in the app.</p>
 
-<h2>In the app</h2>
+<h2>Delete some of your data (a date range)</h2>
 <ol>
   <li>Open RightNow and sign in.</li>
-  <li>Go to <strong>Settings</strong> and scroll to the bottom.</li>
-  <li>Tap <strong>Delete account</strong>.</li>
+  <li>Go to <strong>Settings</strong> &rarr; <strong>Delete data or account</strong>.</li>
+  <li>Under <strong>Delete a date range</strong>, choose a start and end date (for example, a whole
+  year).</li>
+  <li>Tap <strong>Delete this range</strong> and confirm. The logged hours and notes in that range
+  are permanently deleted; the rest of your data and your account are untouched.</li>
+</ol>
+
+<h2>Delete your entire account</h2>
+<ol>
+  <li>Open RightNow and sign in.</li>
+  <li>Go to <strong>Settings</strong> &rarr; <strong>Delete data or account</strong>.</li>
+  <li>Tap <strong>Delete my account</strong>.</li>
   <li>Confirm. Your account and all of its data are deleted immediately.</li>
 </ol>
 
