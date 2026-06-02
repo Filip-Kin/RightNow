@@ -8,7 +8,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { trpc } from "./trpc";
-import { getDEK } from "./auth";
+import { getDEK, isAuthError, markSessionExpired } from "./auth";
 import { useDate } from "./time";
 import {
     cellId, configCellId, noteCellId, openCell, sealEntry, sealNote,
@@ -568,6 +568,8 @@ export async function sync(onProgress?: (done: number, total: number, phase?: "p
         // hides why a sync failed).
         // eslint-disable-next-line no-console
         console.error("[entries] sync failed:", e);
+        // A rejected token means the session is dead - gate the app for re-sign-in.
+        if (isAuthError(e)) markSessionExpired();
         setSyncStatus(classifySyncError(e));
     }
 }

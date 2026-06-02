@@ -19,7 +19,11 @@ import { clearTaxonomy } from "./activities";
 
 const K = { session: "rn_session", dek: "rn_dek", email: "rn_email", userId: "rn_userId" } as const;
 
-export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+// "expired" = we have local (decrypted) data + a persisted token, but the server
+// rejected the token. The app is blocked behind the session-expired gate (so a dead
+// session can't silently fail every sync), while the local data stays put so the
+// user can still export a backup before signing in again.
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "expired";
 
 interface AuthState {
     status: AuthStatus;
@@ -80,9 +84,37 @@ export async function restoreSession(): Promise<void> {
         setAuthToken(token);
         dek = dekFromHex(dekHex);
         setState({ status: "authenticated", email, userId });
+        // Background-validate the persisted token: flip to "expired" if the server
+        // rejects it. Optimistically authenticated first so offline launches work.
+        void validateSession();
     } else {
         setState({ status: "unauthenticated" });
     }
+}
+
+/** True for an actual auth rejection (401/403), as opposed to a network error - so
+ *  we never lock the user out just because they're offline. */
+export function isAuthError(e: unknown): boolean {
+    const s = (e as { data?: { httpStatus?: number } })?.data?.httpStatus;
+    return s === 401 || s === 403;
+}
+
+/** Check the persisted token is still valid. Only downgrades on a real auth
+ *  rejection; a network failure is ignored (stay authenticated for offline use). */
+async function validateSession(): Promise<void> {
+    try {
+        await trpc.auth.me.query();
+    } catch (e) {
+        if (isAuthError(e)) markSessionExpired();
+    }
+}
+
+/** The persisted session is no longer valid (token rejected). Keep the local
+ *  decrypted data + DEK so the user can still export a backup, but block the app and
+ *  force a re-sign-in. No-op unless we're currently authenticated. */
+export function markSessionExpired(): void {
+    if (state.status !== "authenticated") return;
+    setState({ status: "expired" });
 }
 
 /** Create an account: email required, password optional, recovery code always set.

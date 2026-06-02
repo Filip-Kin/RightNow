@@ -12,6 +12,8 @@ export default function TabLayout() {
 
   // Gate the app behind auth. While restoring a persisted session, render nothing.
   if (status === "loading") return null;
+  // Server rejected our token: block the app behind the re-sign-in / export gate.
+  if (status === "expired") return <Redirect href="/session-expired" />;
   // Web visitors land on the marketing page; the native app goes straight to login.
   if (status === "unauthenticated") {
     return <Redirect href={Platform.OS === "web" ? "/welcome" : "/auth/login"} />;
