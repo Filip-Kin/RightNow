@@ -53,23 +53,26 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
       bun install --linker hoisted
 
 WORKDIR /src/app
+# Set the Android versionCode from CI (Expo defaults to 1) so each Play upload
+# increments - Play rejects a re-used code. Written into app.json BEFORE prebuild so
+# the generated build.gradle picks it up; AGP's -Pandroid.injected.version.code did
+# NOT override Expo's value, hence this approach.
+ARG VERSION_CODE=1
+ENV VERSION_CODE=${VERSION_CODE}
+RUN node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('app.json','utf8'));(j.expo.android=j.expo.android||{}).versionCode=Number(process.env.VERSION_CODE)||1;fs.writeFileSync('app.json',JSON.stringify(j,null,2));console.log('android.versionCode =',j.expo.android.versionCode);"
 # Generate the native android/ project from app.json + config plugins.
 RUN bunx --bun expo prebuild -p android --no-install
 
 # Phone build: sign the release with the EAS-managed upload key via AGP's injected
 # signing (no need to touch the prebuilt build.gradle). The keystore + passwords come
 # from BuildKit secret mounts, so they never land in an image layer or build history.
-# Produces BOTH a sideload APK and a Play AAB; versionCode is injected from CI so each
-# Play upload is monotonically higher (Play rejects re-used codes). Expo's static
-# versionCode (1) is overridden by android.injected.version.code.
-ARG VERSION_CODE=1
+# Produces BOTH a sideload APK and a Play AAB.
 WORKDIR /src/app/android
 RUN --mount=type=secret,id=ks_b64 --mount=type=secret,id=ks_pass \
     --mount=type=secret,id=key_alias --mount=type=secret,id=key_pass \
     --mount=type=cache,target=/root/.gradle \
       base64 -d /run/secrets/ks_b64 > /tmp/release.jks \
       && ./gradlew assembleRelease bundleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon -x lint \
-         -Pandroid.injected.version.code=${VERSION_CODE} \
          -Pandroid.injected.signing.store.file=/tmp/release.jks \
          -Pandroid.injected.signing.store.password="$(cat /run/secrets/ks_pass)" \
          -Pandroid.injected.signing.key.alias="$(cat /run/secrets/key_alias)" \
