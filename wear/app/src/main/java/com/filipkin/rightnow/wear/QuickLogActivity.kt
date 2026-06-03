@@ -71,6 +71,9 @@ class QuickLogActivity : ComponentActivity() {
 
         fun submit(activityIndex: Int, feeling: Int?) {
           AnswerSender.send(this@QuickLogActivity, cur.date, cur.hour, activityIndex, feeling, System.currentTimeMillis())
+          // Locally mark it filled so a re-open before the phone re-pushes the ledger
+          // doesn't re-ask this hour.
+          StateCache.markFilled(this@QuickLogActivity, cur.date, cur.hour, slotMs(cur.date, cur.hour))
           selected = null
           stepIndex += 1
         }
@@ -157,6 +160,17 @@ class QuickLogActivity : ComponentActivity() {
     return fmt(hour) + " - " + fmt((hour + 1) % 24)
   }
 
+  // Start-of-hour epoch ms for a "Y-M-D" date + hour (used for the local filled-ledger).
+  private fun slotMs(date: String, hour: Int): Long {
+    return try {
+      val p = date.split("-")
+      val c = Calendar.getInstance()
+      c.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt(), hour, 0, 0)
+      c.set(Calendar.MILLISECOND, 0)
+      c.timeInMillis
+    } catch (e: Exception) { System.currentTimeMillis() }
+  }
+
   private fun loadActivities(): List<ActivityDef> {
     val json = StateCache.readTaxonomy(this) ?: return emptyList()
     return try {
@@ -175,19 +189,25 @@ class QuickLogActivity : ComponentActivity() {
     }
   }
 
-  // Pending hours oldest->newest, same formula as the phone overlay's buildPending():
-  // clamp(streak0 + hours elapsed since t0, 1, cap), then now-i hours, start of hour.
+  // Pending hours oldest->newest, from the shared filled-ledger the phone pushed:
+  // the fully-elapsed hours in the last `cap` that aren't filled. Same computation as
+  // the phone overlay's pendingSlots + the app's getToAsk. Min 1 so a tap logs the
+  // current hour even when the ledger says everything's caught up.
   private fun buildPending(): List<PendingHour> {
-    val p = StateCache.readPrompt(this) ?: StateCache.readReminder(this)
-    val streak0 = p?.optInt("streak0", 0) ?: 0
-    val t0 = p?.optLong("t0", System.currentTimeMillis()) ?: System.currentTimeMillis()
-    val cap = p?.optInt("cap", 24) ?: 24
-    val elapsed = Math.max(0L, (System.currentTimeMillis() - t0) / 3600000L).toInt()
-    val n = Math.max(1, Math.min(streak0 + elapsed, cap))
+    val cap = StateCache.readCap(this)
+    val filled = StateCache.filledKeys(this)
     val list = ArrayList<PendingHour>()
-    for (i in n downTo 1) {
+    for (i in cap downTo 1) {
       val c = Calendar.getInstance()
       c.add(Calendar.HOUR_OF_DAY, -i)
+      c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
+      val date = "" + c.get(Calendar.YEAR) + "-" + (c.get(Calendar.MONTH) + 1) + "-" + c.get(Calendar.DAY_OF_MONTH)
+      val hour = c.get(Calendar.HOUR_OF_DAY)
+      if (!filled.contains(date + "|" + hour)) list.add(PendingHour(date, hour))
+    }
+    if (list.isEmpty()) {
+      val c = Calendar.getInstance()
+      c.add(Calendar.HOUR_OF_DAY, -1)
       c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
       val date = "" + c.get(Calendar.YEAR) + "-" + (c.get(Calendar.MONTH) + 1) + "-" + c.get(Calendar.DAY_OF_MONTH)
       list.add(PendingHour(date, c.get(Calendar.HOUR_OF_DAY)))

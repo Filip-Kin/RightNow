@@ -19,6 +19,7 @@ import {
     subscribeTaxonomy, taxonomyDirty, taxonomySealedRecord,
 } from "./activities";
 import { dbLoadAll, dbFlush, dbClearAll, type DbEntry } from "./entryDb";
+import { markFilled, clearFilled, trimFilled } from "./filledHours";
 
 export interface LocalEntry {
     date: string; // "YYYY-M-D"
@@ -206,48 +207,9 @@ export function useNotes(): Record<string, string> {
 }
 // #endregion
 
-export interface HourSlot {
-    date: string; // "YYYY-M-D"
-    hour: number; // 0-23
-}
-
-/**
- * The completed hour blocks within the last `windowHours` that have no entry yet.
- * Oldest first. A block [t, t+1h) counts only once it has fully elapsed (t+1h <=
- * now), so the in-progress hour is never demanded. This replaces the old single
- * forward-only `lastSync` anchor, which skipped gaps and so falsely reported
- * "caught up". Bounded by the window, so an old import can't balloon the count.
- */
-export function getUnloggedHours(windowHours: number, now: number): HourSlot[] {
-    const hourStart = new Date(now);
-    hourStart.setMinutes(0, 0, 0); // start of the current (in-progress) hour
-    const out: HourSlot[] = [];
-    for (let i = windowHours; i >= 1; i--) {
-        const t = new Date(hourStart.getTime() - i * HOUR_MS); // a fully-elapsed block start
-        const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
-        if (!isHourLogged(date, t.getHours())) out.push({ date, hour: t.getHours() });
-    }
-    return out;
-}
-
-/**
- * How many consecutive most-recent fully-elapsed hours have no entry, capped at
- * `cap`. This is the "you're N hours behind" streak driving the hourly nudge.
- * Returns 0 when locked (no DEK) so we never escalate on undecryptable data.
- */
-export function trailingUnloggedStreak(cap: number, now: number): number {
-    if (!getDEK()) return 0;
-    const hourStart = new Date(now);
-    hourStart.setMinutes(0, 0, 0); // start of the current (in-progress) hour
-    let streak = 0;
-    for (let i = 1; i <= cap; i++) {
-        const t = new Date(hourStart.getTime() - i * HOUR_MS);
-        const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
-        if (isHourLogged(date, t.getHours())) break;
-        streak++;
-    }
-    return streak;
-}
+// The "what hours still need filling" decision lives in lib/filledHours now (shared
+// plaintext ledger used by the app, the native overlay, and the watch). Seed it from
+// the decrypted store with seedFilledFromStore() above.
 
 /** Whether the local store has finished its initial load (vs. still empty). */
 export function getStoreLoaded(): boolean {
@@ -264,17 +226,6 @@ export function useStoreLoaded(): boolean {
     return v;
 }
 
-/** Reactive unlogged-hours list; re-evaluates each hour and on store changes. */
-export function useUnloggedHours(windowHours: number): HourSlot[] {
-    const now = useDate("hourly");
-    const [, force] = useState(0);
-    useEffect(() => {
-        loadStore();
-        return subscribeEntries(() => force((n) => n + 1));
-    }, []);
-    return getUnloggedHours(windowHours, now.getTime());
-}
-
 /** Record (or overwrite) one hour's entry, then push it (debounced). Optimistic. */
 export async function setEntry(
     date: string,
@@ -289,9 +240,32 @@ export async function setEntry(
     store[id] = { date, hour, activity, feeling, source, updatedAt: Date.now(), deleted: false };
     dirty.add(id);
     diskEntries.add(id);
+    // Keep the shared "what to ask" ledger in step: a real entry marks the hour
+    // filled; blanking it to nothing re-surfaces it. (Mirrors isHourLogged.)
+    if (activity !== null || feeling !== null) markFilled(date, hour);
+    else clearFilled(date, hour);
     emit();
     await persist();
     schedulePush();
+}
+
+/**
+ * Union every hour the store knows is logged within the last `windowHours` into the
+ * shared filled-ledger. Seeds a fresh device / picks up hours logged on another
+ * device or the web (after a pull) so the overlay + watch stop asking for them.
+ * Union-only - never clears - so it can't un-fill an hour a store glitch hides.
+ * No-op without the DEK (can't read the store). Returns true if it ran with a key.
+ */
+export function seedFilledFromStore(now: number = Date.now(), windowHours = 25): boolean {
+    if (!getDEK()) return false;
+    const hourStart = new Date(now);
+    hourStart.setMinutes(0, 0, 0);
+    for (let i = 1; i <= windowHours; i++) {
+        const t = new Date(hourStart.getTime() - i * HOUR_MS);
+        const date = `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}`;
+        if (isHourLogged(date, t.getHours())) markFilled(date, t.getHours());
+    }
+    return true;
 }
 
 /**
@@ -321,6 +295,7 @@ export async function fillHealthSleep(
     };
     dirty.add(id);
     diskEntries.add(id);
+    markFilled(date, hour);
     changed++;
   }
   if (changed) {
@@ -357,6 +332,7 @@ export async function importEntries(
         store[id] = { date: it.date, hour: it.hour, activity, feeling, source: "manual", updatedAt, deleted: false };
         dirty.add(id);
         diskEntries.add(id);
+        if (activity !== null || feeling !== null) markFilled(it.date, it.hour);
     }
     emit();
     await persist();
@@ -616,6 +592,9 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
                     source: p.source, updatedAt: r.updatedAt, deleted: r.deleted,
                 };
                 diskEntries.add(r.cellId);
+                // Reflect a hour logged on another device / the web into the shared
+                // ledger so the overlay + watch stop asking for it here.
+                if (!r.deleted && (p.activity !== null || p.feeling !== null)) markFilled(p.date, p.hour);
                 changed = true;
             } else {
                 const existing = notes[p.date];
@@ -634,6 +613,10 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         await persist();
     }
     onProgress?.(processed, grandTotal, "pull");
+    // Reconcile the shared ask-ledger with the freshly-merged store, and drop stale
+    // rows so it can't grow unbounded.
+    seedFilledFromStore();
+    trimFilled();
     // eslint-disable-next-line no-console
     if (__DEV__) console.warn(`[sync] done processed=${processed} finalCursor=${cursor}/${cursorId}`);
     setSyncStatus("ok");

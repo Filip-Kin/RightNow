@@ -46,12 +46,12 @@ object WearBridge {
   }
 
   // The hourly trigger: the watch posts its own local notification on this change.
-  // Carries the current streak baseline so the watch computes the same pending-hour
-  // count the phone overlay does (streak0 + hours elapsed since t0, capped).
-  fun putPrompt(ctx: Context, streak0: Int, t0: Long, cap: Int) {
+  // Carries the shared filled-ledger (JSON of "date|hour" keys) + the catch-up cap so
+  // the watch computes the same pending set the phone overlay + app do. The ts forces
+  // the DataItem to change even when the ledger content is identical hour-to-hour.
+  fun putPrompt(ctx: Context, filledJson: String, cap: Int) {
     val req = PutDataMapRequest.create("/rightnow/prompt")
-    req.dataMap.putInt("streak0", streak0)
-    req.dataMap.putLong("t0", t0)
+    req.dataMap.putString("filled", filledJson)
     req.dataMap.putInt("cap", cap)
     req.dataMap.putLong("ts", System.currentTimeMillis())
     val r = req.asPutDataRequest()
@@ -84,6 +84,7 @@ import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Calendar
 
 class RightNowWearListenerService : WearableListenerService() {
   override fun onDataChanged(events: DataEventBuffer) {
@@ -129,6 +130,15 @@ class RightNowWearListenerService : WearableListenerService() {
       o.put("ts", ts)
       arr.put(o)
       f.writeText(arr.toString())
+      // Reflect the watch answer in the shared filled-ledger right away so the phone
+      // overlay + app stop asking for it (don't wait for the JS drain).
+      try {
+        val p = date.split("-")
+        val c = Calendar.getInstance()
+        c.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt(), hour, 0, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        QuickLogScheduler.markFilledHour(applicationContext, c)
+      } catch (e: Exception) {}
     } catch (e: Exception) {}
   }
 }

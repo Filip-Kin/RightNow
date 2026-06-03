@@ -16,6 +16,7 @@ import { File, Paths } from "expo-file-system";
 import { NativeModules } from "react-native";
 import { getActivities, subscribeTaxonomy } from "./activities";
 import { importEntries, push } from "./entries";
+import { reloadFilled, trimFilled } from "./filledHours";
 
 // Phone->watch taxonomy mirror (no-op when the native module / Wear bridge is absent).
 const QuickLog: { pushTaxonomy(json: string): Promise<boolean> } | undefined = NativeModules.QuickLog;
@@ -96,13 +97,21 @@ export async function drainQuickLogQueue(): Promise<number> {
   if (draining) return 0;
   draining = true;
   try {
+    // Pick up any filled-hours the native overlay (separate process) recorded while we
+    // were away, so our in-memory ledger isn't stale before importEntries unions in.
+    await reloadFilled();
     const queue = await readJson<PendingAnswer[]>(QUEUE_FILE);
-    if (!queue || queue.length === 0) return 0;
+    if (!queue || queue.length === 0) {
+      trimFilled();
+      return 0;
+    }
     const consumed = queue.length;
 
-    // importEntries throws if locked (no DEK) - keep the queue and bail.
+    // importEntries throws if locked (no DEK) - keep the queue and bail. It also marks
+    // each answered hour in the shared filled-ledger.
     await importEntries(queue.map((q) => ({ date: q.date, hour: q.hour, activity: q.activity, feeling: q.feeling })));
     await push();
+    trimFilled(); // keep the ledger bounded to the last ~25h
 
     // Only drop the entries we consumed; anything the overlay appended while we were
     // draining stays queued for the next drain.

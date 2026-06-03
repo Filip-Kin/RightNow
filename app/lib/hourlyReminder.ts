@@ -4,19 +4,21 @@
 // an AlarmManager fires each hour and posts a notification whose TAP starts the
 // draw-over overlay Service directly (no activity launch, so the user's foreground
 // app never loses focus). This JS module owns the *state* the native side reads:
-//   - quicklog-reminder.json: { enabled, streak0, t0, cap } so native computes the
-//     escalating "last N hours" body text without needing the decryption key (the
-//     streak only grows while the app is closed, since you can only log via the
-//     overlay/app). Refreshed on app open / foreground / after each entry change.
+//   - quicklog-reminder.json: { enabled, cap } - just whether the nudge is on and how
+//     far back to catch up. The "which hours still need filling" decision now comes
+//     from the shared quicklog-filled.json ledger (see lib/filledHours), which this
+//     module refreshes from the encrypted store (seedFilledFromStore) on app open /
+//     foreground / after each entry change, so the overlay never re-asks a filled hour.
 //   - It arms/disarms the native AlarmManager via the QuickLog native module.
 // The expo-background-fetch task is the Doze safety-net that drains the quick-log
-// queue (and refreshes the streak) when the instant headless wake is throttled.
+// queue (and refreshes the ledger) when the instant headless wake is throttled.
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { File, Paths } from "expo-file-system";
 import { NativeModules, Platform } from "react-native";
 import { getConfig } from "./config";
-import { subscribeEntries, trailingUnloggedStreak, loadStore } from "./entries";
+import { subscribeEntries, seedFilledFromStore, loadStore } from "./entries";
+import { trimFilled } from "./filledHours";
 
 const HOURLY_TASK = "right-now-hourly-update";
 const REMINDER_FILE = "quicklog-reminder.json";
@@ -53,13 +55,7 @@ export function reminderBody(streak: number): string {
     : "What are you doing right now? Tap to log this hour.";
 }
 
-function startOfHour(now: number): number {
-  const d = new Date(now);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
-}
-
-interface ReminderState { enabled: boolean; streak0: number; t0: number; cap: number }
+interface ReminderState { enabled: boolean; cap: number }
 
 function writeReminder(state: ReminderState): void {
   try {
@@ -135,15 +131,18 @@ export async function refreshHourlyReminder(now: number = Date.now()): Promise<v
     const cap = cfg?.catchUpWindowHours ?? DEFAULT_CAP;
 
     if (!enabled) {
-      writeReminder({ enabled: false, streak0: 0, t0: startOfHour(now), cap });
+      writeReminder({ enabled: false, cap });
       await QuickLog?.disarm().catch(() => {});
       await unregisterTask();
       return;
     }
 
+    // Refresh the shared filled-ledger (which the native overlay reads) from this
+    // device's logged hours, and bound it - so the overlay never re-asks a filled hour.
     await loadStore();
-    const streak = trailingUnloggedStreak(cap, now);
-    writeReminder({ enabled: true, streak0: streak, t0: startOfHour(now), cap });
+    seedFilledFromStore(now);
+    trimFilled(now);
+    writeReminder({ enabled: true, cap });
     await QuickLog?.arm().catch(() => {});
     await registerTask();
   } finally {

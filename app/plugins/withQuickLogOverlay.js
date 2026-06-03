@@ -54,6 +54,53 @@ object QuickLogScheduler {
   }
 
   fun isEnabled(ctx: Context): Boolean = reminder(ctx)?.optBoolean("enabled", false) ?: false
+  fun capFor(ctx: Context): Int = reminder(ctx)?.optInt("cap", 24) ?: 24
+
+  // #region shared filled-ledger (the cross-surface "what to ask" source of truth)
+  private fun filledFile(ctx: Context) = File(ctx.filesDir, "quicklog-filled.json")
+
+  fun filledRaw(ctx: Context): String =
+    try { val f = filledFile(ctx); if (f.exists()) f.readText() else "{}" } catch (e: Exception) { "{}" }
+
+  // Keys are "YEAR-(MONTH+1)-DAY|HOUR" - byte-for-byte the same format JS writes.
+  fun filledKeys(ctx: Context): Set<String> {
+    return try {
+      val o = JSONObject(filledRaw(ctx))
+      val out = HashSet<String>()
+      val it = o.keys()
+      while (it.hasNext()) out.add(it.next())
+      out
+    } catch (e: Exception) { emptySet() }
+  }
+
+  fun dateHourKey(c: Calendar): String =
+    "" + c.get(Calendar.YEAR) + "-" + (c.get(Calendar.MONTH) + 1) + "-" + c.get(Calendar.DAY_OF_MONTH) + "|" + c.get(Calendar.HOUR_OF_DAY)
+
+  // The fully-elapsed hour-blocks within the last cap hours not in the ledger,
+  // oldest first. Same computation as the app's getToAsk + the watch's buildPending.
+  fun pendingSlots(ctx: Context, cap: Int): List<Calendar> {
+    val filled = filledKeys(ctx)
+    val hourStart = Calendar.getInstance()
+    hourStart.set(Calendar.MINUTE, 0); hourStart.set(Calendar.SECOND, 0); hourStart.set(Calendar.MILLISECOND, 0)
+    val out = ArrayList<Calendar>()
+    for (i in cap downTo 1) {
+      val c = hourStart.clone() as Calendar
+      c.add(Calendar.HOUR_OF_DAY, -i)
+      if (!filled.contains(dateHourKey(c))) out.add(c)
+    }
+    return out
+  }
+
+  // Record an hour as filled so the overlay/app/watch stop asking for it. Union write.
+  fun markFilledHour(ctx: Context, c: Calendar) {
+    try {
+      val f = filledFile(ctx)
+      val o = try { if (f.exists()) JSONObject(f.readText()) else JSONObject() } catch (e: Exception) { JSONObject() }
+      o.put(dateHourKey(c), c.timeInMillis)
+      f.writeText(o.toString())
+    } catch (e: Exception) {}
+  }
+  // #endregion
 
   private fun nextHourBoundary(): Long {
     val c = Calendar.getInstance()
@@ -96,14 +143,8 @@ object QuickLogScheduler {
   }
 
   fun bodyText(ctx: Context): String {
-    val r = reminder(ctx)
-    val streak0 = r?.optInt("streak0", 0) ?: 0
-    val t0 = r?.optLong("t0", System.currentTimeMillis()) ?: System.currentTimeMillis()
-    val cap = r?.optInt("cap", 24) ?: 24
-    val elapsed = Math.max(0L, (System.currentTimeMillis() - t0) / 3600000L)
-    var streak = streak0 + elapsed.toInt()
-    if (streak > cap) streak = cap
-    return if (streak >= 2) "What have you been doing the last " + streak + " hours? Tap to fill them in."
+    val n = pendingSlots(ctx, capFor(ctx)).size
+    return if (n >= 2) "What have you been doing the last " + n + " hours? Tap to fill them in."
     else "What are you doing right now? Tap to log this hour."
   }
 
@@ -134,14 +175,8 @@ object QuickLogScheduler {
     if (openPi != null) b.addAction(0, "Open in app", openPi)
     try { NotificationManagerCompat.from(ctx).notify(NOTIF_ID, b.build()) } catch (e: Exception) {}
     // Trigger the watch prompt for this hour (WearBridge lives in withWearBridge).
-    // Carries the current streak baseline so the watch computes the same pending count.
-    try {
-      val r = reminder(ctx)
-      val streak0 = r?.optInt("streak0", 0) ?: 0
-      val t0 = r?.optLong("t0", System.currentTimeMillis()) ?: System.currentTimeMillis()
-      val cap = r?.optInt("cap", 24) ?: 24
-      WearBridge.putPrompt(ctx, streak0, t0, cap)
-    } catch (e: Exception) {}
+    // Carries the shared filled-ledger so the watch computes the same pending set.
+    try { WearBridge.putPrompt(ctx, filledRaw(ctx), capFor(ctx)) } catch (e: Exception) {}
   }
 }
 `;
@@ -255,30 +290,14 @@ class QuickLogService : Service() {
     } catch (e: Exception) { JSONArray() }
   }
 
-  // How many trailing hours are unlogged, per quicklog-reminder.json (streak0 +
-  // hours elapsed since t0). Min 1 so the overlay always logs at least this hour.
-  private fun pendingCount(): Int {
-    return try {
-      val f = docFile("quicklog-reminder.json")
-      if (!f.exists()) return 1
-      val o = JSONObject(f.readText())
-      val streak0 = o.optInt("streak0", 0)
-      val t0 = o.optLong("t0", System.currentTimeMillis())
-      val cap = o.optInt("cap", 24)
-      val elapsed = Math.max(0L, (System.currentTimeMillis() - t0) / 3600000L).toInt()
-      Math.max(1, Math.min(streak0 + elapsed, cap))
-    } catch (e: Exception) { 1 }
-  }
-
   private fun buildPending() {
-    pending = ArrayList()
     stepIndex = 0
-    val n = pendingCount()
-    // Oldest first, ending at the just-elapsed hour - matches the in-app catch-up
-    // order so you fill the gap chronologically up to "right now".
-    for (i in n downTo 1) {
+    // The hours actually still open, from the shared filled-ledger (oldest first) -
+    // no more counting already-filled hours. Min 1 so a tap always logs something.
+    pending = ArrayList(QuickLogScheduler.pendingSlots(this, QuickLogScheduler.capFor(this)))
+    if (pending.isEmpty()) {
       val c = Calendar.getInstance()
-      c.add(Calendar.HOUR_OF_DAY, -i)
+      c.add(Calendar.HOUR_OF_DAY, -1)
       c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
       pending.add(c)
     }
@@ -304,6 +323,9 @@ class QuickLogService : Service() {
       o.put("ts", System.currentTimeMillis())
       arr.put(o)
       f.writeText(arr.toString())
+      // Mark this hour filled in the shared ledger so it leaves the ask-set at once
+      // (this overlay's next open, the app on reload, and the watch on next push).
+      QuickLogScheduler.markFilledHour(applicationContext, c)
     } catch (e: Exception) {}
   }
 

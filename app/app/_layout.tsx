@@ -9,6 +9,7 @@ import { restoreSession } from "@/lib/auth";
 import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
 import { refreshHourlyReminder, consumeQuickLogLaunchRoute } from "@/lib/hourlyReminder";
 import { startTaxonomyMirror, drainQuickLogQueue } from "@/lib/quickLog";
+import { reloadFilled } from "@/lib/filledHours";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
@@ -31,6 +32,7 @@ export default function RootLayout() {
     checkLaunchRoute();
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") {
+        reloadFilled(); // pick up hours the overlay/watch filled while backgrounded
         maybeSyncHealthOnForeground();
         refreshHourlyReminder();
         drainQuickLogQueue();

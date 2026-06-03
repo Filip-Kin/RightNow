@@ -2,7 +2,9 @@ import { AnimatedText } from "@/components/AnimatedText";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useTheme } from "@/lib/theme";
 import { useConfig } from "@/lib/config";
-import { sync, useUnloggedHours, useStoreLoaded } from "@/lib/entries";
+import { sync, seedFilledFromStore, useStoreLoaded } from "@/lib/entries";
+import { useToAsk } from "@/lib/filledHours";
+import { useAuth } from "@/lib/auth";
 import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
@@ -23,9 +25,16 @@ export default function HomeScreen() {
   const router = useRouter();
   const c = useTheme();
   const config = useConfig();
+  const auth = useAuth();
   const storeLoaded = useStoreLoaded();
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const needsSetup = !config.deviceSetupDone;
+
+  // Seed the shared filled-ledger from this device's logged hours as soon as the store
+  // + DEK are ready, so the "behind" count is right before the network sync finishes.
+  useEffect(() => {
+    if (storeLoaded) seedFilledFromStore();
+  }, [storeLoaded, auth.status]);
 
   // Pull remote changes (and push anything pending) when the home screen opens. On a
   // fresh sign-in this downloads everything, so report progress to a download screen.
@@ -37,7 +46,7 @@ export default function HomeScreen() {
       .finally(() => setProgress(null));
   }, [needsSetup]);
 
-  const behindCount = useUnloggedHours(config.catchUpWindowHours).length;
+  const behindCount = useToAsk(config.catchUpWindowHours).length;
 
   // First sign-in on a device: run the one-time setup/permissions flow.
   if (needsSetup) return <Redirect href="/setup" />;

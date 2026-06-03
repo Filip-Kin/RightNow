@@ -19,12 +19,7 @@ class WearListenerService : WearableListenerService() {
           "/rightnow/taxonomy" -> StateCache.writeTaxonomy(this, map.getString("json") ?: "")
           "/rightnow/reminder" -> StateCache.writeReminder(this, map.getString("json") ?: "")
           "/rightnow/prompt" -> {
-            StateCache.writePrompt(
-              this,
-              map.getInt("streak0", 0),
-              map.getLong("t0", System.currentTimeMillis()),
-              map.getInt("cap", 24),
-            )
+            StateCache.writePrompt(this, map.getString("filled") ?: "{}", map.getInt("cap", 24))
             PromptNotifier.show(this)
           }
           // The prompt was answered on the phone -> clear our notification too.

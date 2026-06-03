@@ -7,7 +7,9 @@ import { clearHourlyPrompt } from "@/lib/hourlyReminder";
 import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useFocusEffect, useRouter } from "expo-router";
-import { getEntry, setEntry, useStoreLoaded, useUnloggedHours, type HourSlot } from "@/lib/entries";
+import { getEntry, setEntry, useStoreLoaded, seedFilledFromStore } from "@/lib/entries";
+import { getToAsk, useToAsk, type HourSlot } from "@/lib/filledHours";
+import { getDEK, useAuth } from "@/lib/auth";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useActivities } from "@/lib/activities";
 import {
@@ -65,31 +67,33 @@ export default function Index() {
     ...activities.filter((a) => a.skipFeeling),
   ];
 
-  const unlogged = useUnloggedHours(config.catchUpWindowHours);
+  // The to-ask queue is sourced from the shared filled-ledger (the same source the
+  // overlay + watch read), NOT derived live from the encrypted store - so a transient
+  // store read can't balloon it to the full window (the old "jumped to 24 hours" bug).
+  useAuth(); // re-render when the DEK arrives so `ready` flips
   const storeLoaded = useStoreLoaded();
+  useToAsk(config.catchUpWindowHours); // subscribe so we re-render as the ledger changes
+  // We can only trust the ledger once the store has loaded AND the DEK is available to
+  // seed it from what's already logged on this device.
+  const ready = storeLoaded && !!getDEK();
 
-  // Keep the freshest unlogged list in a ref so the focus handler reads current data
-  // (not a stale closure from first render).
-  const liveUnlogged = useRef(unlogged);
-  liveUnlogged.current = unlogged;
-
-  // Snapshot the unlogged queue so it stays stable as we submit (that's what lets us
-  // step backward/forward). Re-snapshotted every time the screen regains focus: /log
-  // is a hidden tab screen that stays mounted after we leave, so without this,
-  // reopening it an hour later from the notification would show the previous hour's
-  // (now-answered) slot at cursor 0.
+  // Snapshot the queue so it stays stable while we step/submit (filling an hour marks
+  // it in the ledger, which would otherwise shift the list under the cursor). Re-taken
+  // whenever the screen regains focus, the store loads, or the DEK arrives - /log is a
+  // hidden tab screen that stays mounted, so reopening it an hour later must re-snapshot.
   const queueRef = useRef<HourSlot[] | null>(null);
   const [, forceRender] = useState(0);
   const [cursor, setCursor] = useState(0);
-  if (queueRef.current === null && storeLoaded) queueRef.current = unlogged;
+  const [focusKey, setFocusKey] = useState(0);
+  useFocusEffect(useCallback(() => setFocusKey((k) => k + 1), []));
 
-  useFocusEffect(
-    useCallback(() => {
-      queueRef.current = liveUnlogged.current;
-      setCursor(0);
-      forceRender((n) => n + 1);
-    }, []),
-  );
+  useEffect(() => {
+    if (!ready) return;
+    seedFilledFromStore(); // union this device's logged hours into the ledger first
+    queueRef.current = getToAsk(Date.now(), config.catchUpWindowHours);
+    setCursor(0);
+    forceRender((n) => n + 1);
+  }, [ready, focusKey, config.catchUpWindowHours]);
 
   const queue = queueRef.current ?? [];
   const slot = queue[cursor];
@@ -106,14 +110,14 @@ export default function Index() {
     setSelectedFeeling(e?.feeling ?? -1);
   }, [cursor, slot?.date, slot?.hour]);
 
-  // Finished the queue (or nothing to log) -> leave the flow. Wait for the store to
-  // load so we don't dismiss before knowing what's unlogged.
+  // Finished the queue (or nothing to log) -> leave the flow. Only once we've actually
+  // computed the queue (ready + snapshotted); never while still waiting on store/DEK.
   useEffect(() => {
-    if (storeLoaded && !slot) {
+    if (ready && queueRef.current !== null && !slot) {
       if (router.canDismiss()) router.dismiss();
       else router.navigate("/");
     }
-  }, [slot, storeLoaded]);
+  }, [slot, ready]);
 
   if (!slot) return <View style={[styles.modalContent, { paddingTop: insets.top + 8 }]} />;
 
