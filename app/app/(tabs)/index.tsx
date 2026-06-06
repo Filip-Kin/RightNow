@@ -4,6 +4,7 @@ import { useTheme } from "@/lib/theme";
 import { useConfig } from "@/lib/config";
 import { sync, seedFilledFromStore, useStoreLoaded } from "@/lib/entries";
 import { useToAsk } from "@/lib/filledHours";
+import { useTzStatus } from "@/lib/timezone";
 import { useAuth } from "@/lib/auth";
 import {
   requestNotificationPermissionsAsync,
@@ -47,6 +48,7 @@ export default function HomeScreen() {
   }, [needsSetup]);
 
   const behindCount = useToAsk(config.catchUpWindowHours).length;
+  const { transit } = useTzStatus();
 
   // First sign-in on a device: run the one-time setup/permissions flow.
   if (needsSetup) return <Redirect href="/setup" />;
@@ -95,6 +97,19 @@ export default function HomeScreen() {
           >
             <ActivityIndicator color={c.primary} />
           </View>
+        ) : transit ? (
+          <TouchableOpacity
+            style={{
+              borderWidth: 1, borderColor: c.border,
+              alignItems: "center", justifyContent: "center",
+              width: "62%", aspectRatio: 1, padding: 20,
+              backgroundColor: c.card, borderRadius: 9999,
+            }}
+            onPress={() => { router.push({ pathname: "/travel" }); }}
+          >
+            <Text style={{ fontSize: 22, color: c.text, textAlign: "center" }}>You're traveling</Text>
+            <Text style={{ fontSize: 14, color: c.textMuted, textAlign: "center", marginTop: 6 }}>Tap when you land</Text>
+          </TouchableOpacity>
         ) : behindCount <= 0 ? (
           <View
             style={{

@@ -13,6 +13,7 @@ import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
+import { useTzStatus, beginManualTrip } from "@/lib/timezone";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 function syncText(s: SyncStatus, lastSyncAt: number, hour24: boolean): string {
@@ -43,6 +44,7 @@ export default function Settings() {
   const config = useConfig();
   const { email } = useAuth();
   const syncState = useSyncStatus();
+  const { transit } = useTzStatus();
   const router = useRouter();
 
   const [hcAvailable, setHcAvailable] = useState<boolean | null>(null);
@@ -214,6 +216,28 @@ export default function Settings() {
         ))}
       </View>
 
+      <Text style={styles.label}>Travel &amp; timezone</Text>
+      <View style={styles.row}>
+        <Text style={[styles.navText, { flex: 1 }]}>Handle timezone changes</Text>
+        <Switch
+          value={config.timezoneHandlingEnabled}
+          onValueChange={(v) => { config.timezoneHandlingEnabled = v; }}
+          trackColor={{ true: c.primary, false: c.border }}
+        />
+      </View>
+      <Text style={styles.hint}>
+        Keeps your timeline in local time. Adjusts for daylight saving automatically and, when you
+        fly, fits your travel hours onto the grid instead of leaving a gap.
+      </Text>
+      <TouchableOpacity
+        style={styles.navItem}
+        onPress={async () => { if (!transit) await beginManualTrip(); router.push("/travel"); }}
+      >
+        <Icon name="flight" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>{transit ? "I've landed" : "I'm traveling now"}</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
+
       <Text style={styles.label}>Data</Text>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>
         <Icon name="category" style={{ color: c.textBody }} />
@@ -363,6 +387,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   segText: { fontSize: 14, fontWeight: "600", color: c.textBody },
   segTextActive: { color: c.onPrimary },
   label: { fontSize: 16, fontWeight: "bold", marginTop: 20, marginBottom: 8, color: c.textBody },
+  hint: { fontSize: 12, color: c.textMuted, lineHeight: 17, marginTop: 6, marginBottom: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 16 },
   stepper: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.primary, alignItems: "center", justifyContent: "center" },
   stepperText: { color: c.onPrimary, fontSize: 24, fontWeight: "700", lineHeight: 26 },

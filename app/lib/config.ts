@@ -26,6 +26,9 @@ export interface Config {
   // Whether the post-sign-in "set up this device" flow has been completed/dismissed
   // on this device (notifications, battery optimization, Health permissions).
   deviceSetupDone: boolean;
+  // Detect device-timezone changes and handle them (DST blend + the travel prompt
+  // that resamples transit onto the grid). On by default.
+  timezoneHandlingEnabled: boolean;
 }
 
 const listeners = new Set<(config: Config) => void>();
@@ -41,6 +44,7 @@ function parse(value: string | null): Config {
   config.healthSleepEnabled ??= false;
   config.lastHealthSyncAt ??= 0;
   config.deviceSetupDone ??= false;
+  config.timezoneHandlingEnabled ??= true;
   return config;
 }
 

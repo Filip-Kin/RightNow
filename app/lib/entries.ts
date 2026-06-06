@@ -26,7 +26,7 @@ export interface LocalEntry {
     hour: number; // 0-23
     activity: number | null;
     feeling: number | null;
-    source: "manual" | "health";
+    source: "manual" | "health" | "transit";
     updatedAt: number; // epoch ms, logical clock for LWW
     deleted: boolean;
 }
@@ -97,7 +97,7 @@ export async function loadStore(): Promise<void> {
         const [all] = await Promise.all([dbLoadAll(), loadTaxonomy()]);
         store = {};
         for (const e of all.entries) {
-            store[e.cellId] = { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source as "manual" | "health", updatedAt: e.updatedAt, deleted: e.deleted };
+            store[e.cellId] = { date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling, source: e.source as LocalEntry["source"], updatedAt: e.updatedAt, deleted: e.deleted };
         }
         notes = {};
         for (const n of all.notes) notes[n.date] = { text: n.text, updatedAt: n.updatedAt };
@@ -306,9 +306,101 @@ export async function fillHealthSleep(
   return changed;
 }
 
+/**
+ * Write resampled travel-transit cells into the grid. Like fillHealthSleep, this
+ * NEVER overwrites a manual (or any non-transit) entry - so a westbound flight
+ * can't clobber the origin-timezone day it overlaps - and uses the slot's real
+ * time as updatedAt so a later manual edit always wins LWW. A prior transit cell
+ * at the same slot is replaced (re-resampling on resolution, or re-logging an
+ * hour in flight). Returns cells written.
+ */
+export async function fillTransit(
+  cells: { date: string; hour: number; activity: number | null; feeling: number | null }[],
+): Promise<number> {
+  const dek = getDEK();
+  if (!dek) throw new Error("Locked: no decryption key");
+  await loadStore();
+  let changed = 0;
+  for (const { date, hour, activity, feeling } of cells) {
+    const id = cellId(dek, date, hour);
+    const prev = store[id];
+    if (prev && !prev.deleted && prev.source !== "transit") continue; // never clobber manual/health
+    store[id] = { date, hour, activity, feeling, source: "transit", updatedAt: slotMs(date, hour), deleted: false };
+    dirty.add(id);
+    diskEntries.add(id);
+    if (activity !== null || feeling !== null) markFilled(date, hour);
+    changed++;
+  }
+  if (changed) {
+    emit();
+    await persist();
+    schedulePush();
+  }
+  return changed;
+}
+
+/** Delete the transit cells in the given slots (used when re-resolving a trip so a
+ *  prior over-long resample doesn't leave stray Transition tails). Manual/health
+ *  cells are never touched. */
+export async function clearTransit(slots: { date: string; hour: number }[]): Promise<number> {
+  const dek = getDEK();
+  if (!dek) throw new Error("Locked: no decryption key");
+  await loadStore();
+  let changed = 0;
+  for (const { date, hour } of slots) {
+    const id = cellId(dek, date, hour);
+    const prev = store[id];
+    if (!prev || prev.deleted || prev.source !== "transit") continue;
+    store[id] = { ...prev, activity: null, feeling: null, deleted: true, updatedAt: Date.now() };
+    dirty.add(id);
+    diskEntries.add(id);
+    clearFilled(date, hour);
+    changed++;
+  }
+  if (changed) {
+    emit();
+    await persist();
+    schedulePush();
+  }
+  return changed;
+}
+
 function slotMs(date: string, hour: number): number {
     const [y, mo, d] = date.split("-").map(Number);
     return new Date(y, mo - 1, d, hour, 0, 0, 0).getTime();
+}
+
+/** Local-time epoch ms for a (date "YYYY-M-D", hour) slot start. Exported for the
+ *  timezone module's span math (it must reason in the same local clock as slots). */
+export function slotMsOf(date: string, hour: number): number {
+    return slotMs(date, hour);
+}
+
+/** Read the (activity, feeling) for an hour as a transit segment cell, or null if
+ *  unlogged. Used to reconstruct the transit segment on "I just arrived". */
+export function transitCellAt(date: string, hour: number): { activity: number | null; feeling: number | null } | null {
+    const e = getEntry(date, hour);
+    if (!e || (e.activity === null && e.feeling === null)) return null;
+    return { activity: e.activity, feeling: e.feeling };
+}
+
+/** All current transit-source cells, in lived order (by slot start). These ARE the
+ *  in-flight buffer: source "transit" entries are visible on the grid + synced, and
+ *  this reads them back as the segment to resample at resolution. */
+export function getTransitCells(): { date: string; hour: number; activity: number | null; feeling: number | null }[] {
+    const out: { date: string; hour: number; activity: number | null; feeling: number | null }[] = [];
+    for (const id in store) {
+        const e = store[id];
+        if (!e.deleted && e.source === "transit") out.push({ date: e.date, hour: e.hour, activity: e.activity, feeling: e.feeling });
+    }
+    return out.sort((a, b) => slotMs(a.date, a.hour) - slotMs(b.date, b.hour));
+}
+
+/** Log one hour during an active trip: written as a "transit" cell (so it's the
+ *  resample buffer) and NEVER over a manual/health entry (protects origin data a
+ *  westbound flight overlaps). Visible on the grid + synced like any cell. */
+export async function setTransitEntry(date: string, hour: number, activity: number | null, feeling: number | null): Promise<void> {
+    await fillTransit([{ date, hour, activity, feeling }]);
 }
 
 /**

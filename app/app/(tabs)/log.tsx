@@ -7,7 +7,8 @@ import { clearHourlyPrompt } from "@/lib/hourlyReminder";
 import { AnimatedText } from "@/components/AnimatedText";
 import ProgressIndicator from "@/components/ProgressIndicator";
 import { useFocusEffect, useRouter } from "expo-router";
-import { getEntry, setEntry, useStoreLoaded, seedFilledFromStore } from "@/lib/entries";
+import { getEntry, setEntry, setTransitEntry, useStoreLoaded, seedFilledFromStore } from "@/lib/entries";
+import { isTransitActive } from "@/lib/timezone";
 import { getToAsk, useToAsk, type HourSlot } from "@/lib/filledHours";
 import { getDEK, useAuth } from "@/lib/auth";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -137,7 +138,12 @@ export default function Index() {
 
   // Save the current slot, then move on. The pre-fill effect resets the selection.
   const submit = (activityIndex: number | null, feeling: number | null) => {
-    setEntry(slot.date, slot.hour, activityIndex, feeling, "manual").catch((e) => {
+    // While traveling, log hours as "transit" cells (the resample buffer) so they
+    // get fitted to the grid on arrival and never clobber origin-timezone data.
+    const write = isTransitActive()
+      ? setTransitEntry(slot.date, slot.hour, activityIndex, feeling)
+      : setEntry(slot.date, slot.hour, activityIndex, feeling, "manual");
+    write.catch((e) => {
       console.error(e);
       alert(String(e));
     });

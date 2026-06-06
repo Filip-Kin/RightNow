@@ -17,7 +17,7 @@ export interface BackupEntry {
   hour: number; // 0-23
   activity: number | null;
   feeling: number | null;
-  source: "manual" | "health";
+  source: "manual" | "health" | "transit";
 }
 
 export interface BackupNote {
@@ -102,7 +102,7 @@ export function parseBackup(text: string): ParsedBackup {
       hour: e.hour,
       activity: typeof e.activity === "number" ? e.activity : null,
       feeling: typeof e.feeling === "number" ? e.feeling : null,
-      source: e.source === "health" ? "health" : "manual",
+      source: e.source === "health" ? "health" : e.source === "transit" ? "transit" : "manual",
     });
   }
   const notes: BackupNote[] = [];

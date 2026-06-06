@@ -10,6 +10,7 @@ import { maybeSyncHealthOnForeground } from "@/lib/healthSync";
 import { refreshHourlyReminder, consumeQuickLogLaunchRoute } from "@/lib/hourlyReminder";
 import { startTaxonomyMirror, drainQuickLogQueue } from "@/lib/quickLog";
 import { reloadFilled } from "@/lib/filledHours";
+import { detectTimezoneChange, drainPendingTz, hasPendingTravel } from "@/lib/timezone";
 import { useTheme } from "@/lib/theme";
 
 export default function RootLayout() {
@@ -24,12 +25,25 @@ export default function RootLayout() {
         setTimeout(() => router.push("/log"), 50);
       }
     }
+    // Detect a device-timezone change (DST blend silently; a flight raises the
+    // travel prompt). Replays any resolution that was deferred while locked.
+    async function checkTimezone() {
+      try {
+        const res = await detectTimezoneChange();
+        await drainPendingTz();
+        if (res.needsPrompt || hasPendingTravel()) {
+          router.navigate("/");
+          setTimeout(() => router.push("/travel"), 50);
+        }
+      } catch { /* never block startup on tz handling */ }
+    }
     restoreSession();
     maybeSyncHealthOnForeground();
     refreshHourlyReminder();
     startTaxonomyMirror(); // keep the overlay's plaintext activity mirror fresh
     drainQuickLogQueue(); // sync any answers the overlay/watch queued while we were away
     checkLaunchRoute();
+    checkTimezone();
     const sub = AppState.addEventListener("change", (s) => {
       if (s === "active") {
         reloadFilled(); // pick up hours the overlay/watch filled while backgrounded
@@ -37,6 +51,7 @@ export default function RootLayout() {
         refreshHourlyReminder();
         drainQuickLogQueue();
         checkLaunchRoute();
+        checkTimezone();
       }
     });
     return () => sub.remove();
@@ -54,6 +69,7 @@ export default function RootLayout() {
         <Stack.Screen name="session-expired" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="privacy" options={{ headerShown: false }} />
         <Stack.Screen name="delete-data" options={{ headerShown: false }} />
+        <Stack.Screen name="travel" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen
           name="recovery-code"
           options={{ presentation: "modal", headerShown: false, gestureEnabled: false }}

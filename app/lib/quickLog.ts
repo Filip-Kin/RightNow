@@ -15,8 +15,9 @@
 import { File, Paths } from "expo-file-system";
 import { NativeModules } from "react-native";
 import { getActivities, subscribeTaxonomy } from "./activities";
-import { importEntries, push } from "./entries";
+import { importEntries, fillTransit, push } from "./entries";
 import { reloadFilled, trimFilled } from "./filledHours";
+import { isTransitActive } from "./timezone";
 
 // Phone->watch taxonomy mirror (no-op when the native module / Wear bridge is absent).
 const QuickLog: { pushTaxonomy(json: string): Promise<boolean> } | undefined = NativeModules.QuickLog;
@@ -108,8 +109,12 @@ export async function drainQuickLogQueue(): Promise<number> {
     const consumed = queue.length;
 
     // importEntries throws if locked (no DEK) - keep the queue and bail. It also marks
-    // each answered hour in the shared filled-ledger.
-    await importEntries(queue.map((q) => ({ date: q.date, hour: q.hour, activity: q.activity, feeling: q.feeling })));
+    // each answered hour in the shared filled-ledger. During a trip, route overlay/watch
+    // answers through fillTransit so they're tagged "transit" (the resample buffer) and
+    // never clobber the origin-timezone day a westbound flight overlaps.
+    const cells = queue.map((q) => ({ date: q.date, hour: q.hour, activity: q.activity, feeling: q.feeling }));
+    if (isTransitActive()) await fillTransit(cells);
+    else await importEntries(cells);
     await push();
     trimFilled(); // keep the ledger bounded to the last ~25h
 

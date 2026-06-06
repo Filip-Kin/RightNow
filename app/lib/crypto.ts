@@ -144,7 +144,7 @@ export interface EntryPayload {
     hour: number;
     activity: number | null;
     feeling: number | null;
-    source: "manual" | "health";
+    source: "manual" | "health" | "transit";
 }
 
 export interface NotePayload {
