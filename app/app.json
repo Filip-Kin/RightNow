@@ -17,6 +17,7 @@
         "backgroundColor": "#2d3436"
       },
       "package": "com.filipkin.rightnow",
+      "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "android.permission.health.READ_SLEEP",
         "android.permission.health.READ_HEALTH_DATA_HISTORY",
@@ -59,6 +60,7 @@
       "./plugins/withHealthPermissionUsage",
       "./plugins/withQuickLogOverlay",
       "./plugins/withWearBridge",
+      "./plugins/withLaunchIntent",
       [
         "expo-build-properties",
         {

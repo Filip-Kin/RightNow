@@ -26,6 +26,9 @@ export interface Config {
   // Whether the post-sign-in "set up this device" flow has been completed/dismissed
   // on this device (notifications, battery optimization, Health permissions).
   deviceSetupDone: boolean;
+  // Whether the first full sign-in sync has completed on this device. The initial-sync
+  // gate blocks the app UI until this flips true (set once, permanently).
+  initialSyncDone: boolean;
   // Detect device-timezone changes and handle them (DST blend + the travel prompt
   // that resamples transit onto the grid). On by default.
   timezoneHandlingEnabled: boolean;
@@ -44,6 +47,7 @@ function parse(value: string | null): Config {
   config.healthSleepEnabled ??= false;
   config.lastHealthSyncAt ??= 0;
   config.deviceSetupDone ??= false;
+  config.initialSyncDone ??= false;
   config.timezoneHandlingEnabled ??= true;
   return config;
 }
@@ -101,6 +105,14 @@ function update() {
 export function resetConfig() {
   config = new Proxy(parse(null), configHandlers) as Config;
   update();
+}
+
+/** Like useConfig but never suspends: returns undefined until config has loaded, then
+ *  re-renders. Use where there is no Suspense boundary above (e.g. a layout route). */
+export function useConfigValue(): Config | undefined {
+  const [, forceUpdate] = useState(0);
+  useEffect(() => subscribeConfig(() => forceUpdate((n) => n + 1)), []);
+  return config;
 }
 
 export function useConfig() {

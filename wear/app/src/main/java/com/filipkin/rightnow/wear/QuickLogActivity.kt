@@ -52,10 +52,31 @@ class QuickLogActivity : ComponentActivity() {
 
     setContent {
       MaterialTheme {
-        val activities = remember { loadActivities() }
-        val pending = remember { buildPending() }
+        // Rebuild the local cache from the phone's persisted DataItems first, so a
+        // fresh install isn't blank until the next hourly push. Render a brief loading
+        // state until it's done, then load the (now-hydrated) taxonomy + pending set.
+        var loaded by remember { mutableStateOf(false) }
+        var activities by remember { mutableStateOf<List<ActivityDef>>(emptyList()) }
+        var pending by remember { mutableStateOf<List<PendingHour>>(emptyList()) }
         var stepIndex by remember { mutableIntStateOf(0) }
         var selected by remember { mutableStateOf<ActivityDef?>(null) }
+
+        LaunchedEffect(Unit) {
+          WearSync.hydrate(this@QuickLogActivity) {
+            activities = loadActivities()
+            pending = buildPending()
+            loaded = true
+          }
+        }
+
+        if (!loaded) {
+          Text(
+            text = "Loading…",
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+          )
+          return@MaterialTheme
+        }
 
         // Finished every pending hour (or nothing to log) -> clear the prompt and exit.
         if (stepIndex >= pending.size) {

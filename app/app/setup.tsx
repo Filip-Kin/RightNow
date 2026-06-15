@@ -21,6 +21,7 @@ import { isHealthAvailable, requestSleepPermission } from "@/lib/health";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { applyReminderMode, getReminderMode, type ReminderMode } from "@/lib/reminderMode";
 import { Icon, type IconName } from "@/components/Icon";
+import { SyncBar } from "@/components/SyncBar";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 type StepState = "idle" | "busy" | "done";
@@ -39,7 +40,6 @@ export default function SetupScreen() {
   const router = useRouter();
 
   const [step, setStep] = useState<1 | 2>(1);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [synced, setSynced] = useState(false);
   const [notif, setNotif] = useState<StepState>("idle");
   const [battery, setBattery] = useState<StepState>("idle");
@@ -56,9 +56,9 @@ export default function SetupScreen() {
   // Kick off the first sync immediately; the user does the permission steps while
   // it downloads in the background.
   useEffect(() => {
-    sync((done, total) => setProgress({ done, total }))
+    sync() // progress is published to the shared store and shown by <SyncBar/>
       .catch(() => {})
-      .finally(() => { setProgress(null); syncedRef.current = true; setSynced(true); });
+      .finally(() => { syncedRef.current = true; setSynced(true); });
     isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false));
   }, []);
 
@@ -139,12 +139,6 @@ export default function SetupScreen() {
     router.replace("/");
   }
 
-  const syncLabel = synced
-    ? "Your data is ready"
-    : progress && progress.total > 0
-      ? `Downloading your data… ${progress.done.toLocaleString()} / ${progress.total.toLocaleString()}`
-      : "Syncing your data…";
-
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -154,9 +148,8 @@ export default function SetupScreen() {
           <>
             <Text style={styles.subtitle}>A few quick permissions so reminders and sleep auto-fill work. You can skip any of these and change them later in Settings.</Text>
 
-            <View style={styles.syncBar}>
-              {synced ? <Icon name="check-circle" style={{ color: c.successText }} size={22} /> : <ActivityIndicator color={c.primary} />}
-              <Text style={styles.syncText} numberOfLines={2}>{syncLabel}</Text>
+            <View style={{ marginBottom: 18 }}>
+              <SyncBar />
             </View>
 
             <Step
@@ -254,7 +247,7 @@ export default function SetupScreen() {
 
             <View style={styles.spacer} />
             <TouchableOpacity style={styles.finishBtn} onPress={finish}>
-              <Text style={styles.finishText}>{synced ? "Done" : "Done (syncing in background)"}</Text>
+              <Text style={styles.finishText}>Done</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.skip} onPress={() => setStep(1)}>
               <Text style={styles.skipText}>Back</Text>

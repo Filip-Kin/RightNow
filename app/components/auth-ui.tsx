@@ -74,6 +74,25 @@ export function ErrorText({ children }: { children?: string | null }) {
     return <Text style={styles.error}>{children}</Text>;
 }
 
+/** A "or <label>" separator with hairlines either side. */
+export function OrDivider({ label }: { label: string }) {
+    const styles = useThemedStyles(makeStyles);
+    return (
+        <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>{label}</Text>
+            <View style={styles.dividerLine} />
+        </View>
+    );
+}
+
+/** Resolve after the next paint so a just-set busy state (spinner) renders before
+ *  a synchronous, thread-blocking call (Argon2id) runs. Double rAF guarantees the
+ *  busy frame is committed first. */
+export function yieldToPaint(): Promise<void> {
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+}
+
 const makeStyles = (c: Colors) => StyleSheet.create({
     safe: { flex: 1, backgroundColor: c.bg },
     scroll: { padding: 24, paddingTop: 48, flexGrow: 1, justifyContent: "center" },
@@ -93,4 +112,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     buttonText: { color: c.onPrimary, fontSize: 16, fontWeight: "700" },
     link: { color: c.primary, textAlign: "center", fontSize: 14, fontWeight: "600" },
     error: { color: c.danger, fontSize: 14, marginBottom: 12, textAlign: "center" },
+    divider: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 18 },
+    dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: c.border },
+    dividerText: { fontSize: 13, color: c.textMuted, fontWeight: "600" },
 });

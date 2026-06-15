@@ -9,6 +9,7 @@ import { scheduleDailyReminder } from "@/lib/notification";
 import { applyReminderMode } from "@/lib/reminderMode";
 import { logout, useAuth } from "@/lib/auth";
 import { fullResync, useSyncStatus, type SyncStatus } from "@/lib/entries";
+import { SyncBar } from "@/components/SyncBar";
 import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
@@ -53,12 +54,11 @@ export default function Settings() {
   const [sleepModal, setSleepModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
   const [exportYearN, setExportYearN] = useState(() => new Date().getFullYear());
-  const [syncProgress, setSyncProgress] = useState<{ done: number; total: number; phase: "push" | "pull" } | null>(null);
+  const syncing = syncState.status === "syncing";
 
   function runFullSync() {
-    setSyncProgress({ done: 0, total: 0, phase: "push" });
-    fullResync((done, total, phase) => setSyncProgress({ done, total, phase: phase ?? "pull" }))
-      .finally(() => setSyncProgress(null));
+    // Progress publishes to the shared store and is shown by <SyncBar/> below.
+    void fullResync().catch(() => {});
   }
   useEffect(() => { isHealthAvailable().then(setHcAvailable).catch(() => setHcAvailable(false)); }, []);
 
@@ -124,27 +124,16 @@ export default function Settings() {
         </View>
         <Text style={styles.syncText} numberOfLines={2}>{syncText(syncState.status, syncState.lastSyncAt, config.hour24)}</Text>
         <TouchableOpacity
-          style={[styles.syncBtn, !!syncProgress && styles.disabled]}
-          disabled={!!syncProgress}
+          style={[styles.syncBtn, syncing && styles.disabled]}
+          disabled={syncing}
           onPress={runFullSync}
         >
-          {syncProgress ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.syncBtnText}>Sync now</Text>}
+          {syncing ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.syncBtnText}>Sync now</Text>}
         </TouchableOpacity>
       </View>
-      {syncProgress && (
+      {syncing && (
         <View style={styles.syncProgress}>
-          <View style={styles.syncProgressTrack}>
-            <View
-              style={[
-                styles.syncProgressFill,
-                { width: `${syncProgress.total > 0 ? Math.round((syncProgress.done / syncProgress.total) * 100) : 0}%` },
-              ]}
-            />
-          </View>
-          <Text style={styles.syncProgressText}>
-            {syncProgress.phase === "push" ? "Uploading" : "Downloading"}
-            {syncProgress.total > 0 ? ` ${syncProgress.done.toLocaleString()} / ${syncProgress.total.toLocaleString()}` : "…"}
-          </Text>
+          <SyncBar />
         </View>
       )}
 

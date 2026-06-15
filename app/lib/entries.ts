@@ -20,6 +20,7 @@ import {
 } from "./activities";
 import { dbLoadAll, dbFlush, dbClearAll, type DbEntry } from "./entryDb";
 import { markFilled, clearFilled, trimFilled } from "./filledHours";
+import { getConfig } from "./config";
 
 export interface LocalEntry {
     date: string; // "YYYY-M-D"
@@ -608,6 +609,22 @@ export function setSyncStatusListener(fn: (s: SyncStatus) => void) {
     onSyncStatusChange = fn;
 }
 
+// Live progress of the current sync, so the setup screen, the Settings bar, and the
+// initial-sync gate all read one source instead of threading callbacks. null = idle.
+export interface SyncProgress { done: number; total: number; phase: "push" | "pull"; }
+let syncProgress: SyncProgress | null = null;
+function setSyncProgress(p: SyncProgress | null) {
+    syncProgress = p;
+    for (const l of syncListeners) l(); // shares the sync-status listener set
+}
+export function getSyncProgress(): SyncProgress | null { return syncProgress; }
+/** Reactive sync progress (re-renders on the same channel as useSyncStatus). */
+export function useSyncProgress(): SyncProgress | null {
+    const [v, setV] = useState(getSyncProgress);
+    useEffect(() => subscribeSyncStatus(() => setV(getSyncProgress())), []);
+    return v;
+}
+
 // "error" = the server is reachable but rejecting us (e.g. invalid session) - a real
 // problem to surface. "offline" = no connectivity - stay quiet, it'll retry.
 function classifySyncError(e: unknown): SyncStatus {
@@ -635,12 +652,17 @@ export function sync(onProgress?: (done: number, total: number, phase?: "push" |
 async function runSync(onProgress?: (done: number, total: number, phase?: "push" | "pull") => void): Promise<void> {
     const dek = getDEK();
     if (!dek) return;
+    // Fan progress out to both the legacy callback and the shared store.
+    const report = (done: number, total: number, phase: "push" | "pull") => {
+        setSyncProgress({ done, total, phase });
+        onProgress?.(done, total, phase);
+    };
     setSyncStatus("syncing");
     try {
     await loadStore();
     // eslint-disable-next-line no-console
     if (__DEV__) console.warn(`[sync] start cursor=${cursor} storeSize=${Object.keys(store).length} dirty=${dirty.size}`);
-    await push((sent, ptotal) => onProgress?.(sent, ptotal, "push"));
+    await push((sent, ptotal) => report(sent, ptotal, "push"));
 
     const cfgId = configCellId(dek);
     // Pull is paginated: loop until the server says there's nothing left. `total`
@@ -655,14 +677,14 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         const res = await trpc.entries.pull.query({ since: cursor || undefined, sinceId: cursorId || undefined });
         // eslint-disable-next-line no-console
         if (__DEV__) console.warn(`[sync] page since=${cursor}/${cursorId} -> records=${res.records.length} total=${res.total} hasMore=${res.hasMore}`);
-        if (firstPage) { grandTotal = res.total; onProgress?.(0, grandTotal, "pull"); firstPage = false; }
+        if (firstPage) { grandTotal = res.total; report(0, grandTotal, "pull"); firstPage = false; }
         let changed = false;
         for (const r of res.records) {
             processed++;
             // Yield every so often so a big decrypt loop doesn't freeze the UI and the
             // progress bar can repaint.
             if (processed % 250 === 0) {
-                onProgress?.(processed, grandTotal, "pull");
+                report(processed, grandTotal, "pull");
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
             // The taxonomy config rides the same table as one reserved cell; route it.
@@ -704,7 +726,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         if (changed) emit();
         await persist();
     }
-    onProgress?.(processed, grandTotal, "pull");
+    report(processed, grandTotal, "pull");
     // Reconcile the shared ask-ledger with the freshly-merged store, and drop stale
     // rows so it can't grow unbounded.
     seedFilledFromStore();
@@ -712,6 +734,10 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
     // eslint-disable-next-line no-console
     if (__DEV__) console.warn(`[sync] done processed=${processed} finalCursor=${cursor}/${cursorId}`);
     setSyncStatus("ok");
+    // The first successful pull flips this permanently; the initial-sync gate keys off
+    // it to release the app UI.
+    const cfg = getConfig();
+    if (cfg) cfg.initialSyncDone = true;
     } catch (e) {
         // Surface the failure via status AND log the real cause (the status alone
         // hides why a sync failed).
@@ -720,6 +746,8 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         // A rejected token means the session is dead - gate the app for re-sign-in.
         if (isAuthError(e)) markSessionExpired();
         setSyncStatus(classifySyncError(e));
+    } finally {
+        setSyncProgress(null); // back to idle whether we finished or failed
     }
 }
 

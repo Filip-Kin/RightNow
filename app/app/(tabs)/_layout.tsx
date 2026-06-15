@@ -3,11 +3,14 @@ import React from "react";
 import { Platform } from "react-native";
 
 import { makeTabItem } from "@/components/makeTabItem";
+import { SyncGate } from "@/components/SyncGate";
 import { useAuth } from "@/lib/auth";
+import { useConfigValue } from "@/lib/config";
 import { useTheme } from "@/lib/theme";
 
 export default function TabLayout() {
   const { status } = useAuth();
+  const config = useConfigValue();
   const c = useTheme();
 
   // Gate the app behind auth. While restoring a persisted session, render nothing.
@@ -17,6 +20,12 @@ export default function TabLayout() {
   // Web visitors land on the marketing page; the native app goes straight to login.
   if (status === "unauthenticated") {
     return <Redirect href={Platform.OS === "web" ? "/welcome" : "/auth/login"} />;
+  }
+  // Setup not done yet -> the home screen redirects to /setup (which runs the first
+  // sync). Once setup is dismissed, block the whole app UI behind a full-screen sync
+  // until the initial download finishes. Web has no setup flow, so skip the gate there.
+  if (Platform.OS !== "web" && config && config.deviceSetupDone && !config.initialSyncDone) {
+    return <SyncGate />;
   }
 
   return (

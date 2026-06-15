@@ -100,6 +100,17 @@ object QuickLogScheduler {
       f.writeText(o.toString())
     } catch (e: Exception) {}
   }
+  // Inverse of markFilledHour: drop an hour from the ledger so it's asked again. Used
+  // by the overlay's Back button to undo an hour the user wants to redo.
+  fun unmarkFilledHour(ctx: Context, c: Calendar) {
+    try {
+      val f = filledFile(ctx)
+      if (!f.exists()) return
+      val o = try { JSONObject(f.readText()) } catch (e: Exception) { return }
+      o.remove(dateHourKey(c))
+      f.writeText(o.toString())
+    } catch (e: Exception) {}
+  }
   // #endregion
 
   private fun nextHourBoundary(): Long {
@@ -269,6 +280,9 @@ class QuickLogService : Service() {
   private var selectedActivityName: String = ""
   private var title: TextView? = null
   private var grid: GridLayout? = null
+  private var backBtn: TextView? = null
+  // true while the feeling grid is showing (so Back returns to the activity grid).
+  private var onFeelingStep: Boolean = false
   // Outstanding hours to log, newest first (the streak from quicklog-reminder.json).
   // Each Calendar is the START of an elapsed hour block.
   private var pending: MutableList<Calendar> = ArrayList()
@@ -425,6 +439,19 @@ class QuickLogService : Service() {
     scroll.addView(g)
     card.addView(scroll)
 
+    // Back affordance: undo a wrong tap (feeling -> activity, or step back an hour).
+    val back = TextView(this)
+    back.text = "\\u2190 Back"
+    back.setTextColor(Color.parseColor("#8e8e93"))
+    back.textSize = 15f
+    back.gravity = Gravity.CENTER
+    back.setPadding(0, dp(12), 0, dp(2))
+    back.visibility = View.GONE
+    back.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+    back.setOnClickListener { onBack() }
+    backBtn = back
+    card.addView(back)
+
     scrim.addView(card, LinearLayout.LayoutParams(cardW, LinearLayout.LayoutParams.WRAP_CONTENT))
 
     val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -447,6 +474,8 @@ class QuickLogService : Service() {
   // at the bottom (matching the in-app screen + the watch).
   private fun showActivities() {
     val g = grid ?: return
+    onFeelingStep = false
+    updateBack()
     title?.text = stepTitle("What are you doing?")
     g.removeAllViews()
     g.columnCount = 2
@@ -478,6 +507,8 @@ class QuickLogService : Service() {
 
   private fun showFeelings() {
     val g = grid ?: return
+    onFeelingStep = true
+    updateBack()
     title?.text = stepTitle(selectedActivityName + " - feeling?")
     g.removeAllViews()
     g.columnCount = 2
@@ -489,6 +520,45 @@ class QuickLogService : Service() {
       b.setOnClickListener { finishAnswer(selectedActivity, feeling) }
       g.addView(b)
     }
+  }
+
+  // Show Back on the feeling step (return to activities) or whenever an earlier hour
+  // has already been answered this session (step back to redo it).
+  private fun updateBack() {
+    backBtn?.visibility = if (onFeelingStep || stepIndex > 0) View.VISIBLE else View.GONE
+  }
+
+  private fun onBack() {
+    if (onFeelingStep) {
+      // Nothing recorded yet for this hour - just re-pick the activity.
+      showActivities()
+    } else if (stepIndex > 0) {
+      goBackHour()
+    }
+  }
+
+  // Step back to the previous hour and undo its recorded answer so the user can redo
+  // it: pop the queued entry and clear its filled-ledger mark.
+  private fun goBackHour() {
+    stepIndex--
+    popLastAnswer()
+    if (stepIndex < pending.size) QuickLogScheduler.unmarkFilledHour(applicationContext, pending[stepIndex])
+    selectedActivity = 0
+    selectedActivityName = ""
+    showActivities()
+  }
+
+  // Remove the most-recently appended answer from the overlay/watch queue (the one we
+  // just wrote for the hour being undone).
+  private fun popLastAnswer() {
+    try {
+      val f = docFile("quicklog-queue.json")
+      if (!f.exists()) return
+      val arr = try { JSONArray(f.readText()) } catch (e: Exception) { return }
+      if (arr.length() == 0) return
+      arr.remove(arr.length() - 1)
+      f.writeText(arr.toString())
+    } catch (e: Exception) {}
   }
 
   private fun teardown() {

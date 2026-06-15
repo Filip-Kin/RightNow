@@ -11,7 +11,7 @@ import {
   useNotificationGrantedState,
 } from "@/lib/notification";
 import { Redirect, useRouter } from "expo-router";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import {
   ActivityIndicator,
   Button,
@@ -28,7 +28,6 @@ export default function HomeScreen() {
   const config = useConfig();
   const auth = useAuth();
   const storeLoaded = useStoreLoaded();
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const needsSetup = !config.deviceSetupDone;
 
   // Seed the shared filled-ledger from this device's logged hours as soon as the store
@@ -37,14 +36,13 @@ export default function HomeScreen() {
     if (storeLoaded) seedFilledFromStore();
   }, [storeLoaded, auth.status]);
 
-  // Pull remote changes (and push anything pending) when the home screen opens. On a
-  // fresh sign-in this downloads everything, so report progress to a download screen.
-  // When the device-setup flow is pending it runs the first sync instead, so skip here.
+  // Pull remote changes (and push anything pending) when the home screen opens, to
+  // refresh on subsequent launches. The first sign-in's full download is handled by
+  // the setup flow + the initial-sync gate (see (tabs)/_layout), so just fire and
+  // forget here. When the device-setup flow is pending it runs the first sync instead.
   useEffect(() => {
     if (needsSetup) return;
-    sync((done, total) => setProgress({ done, total }))
-      .catch(() => {/* offline: local state still works */})
-      .finally(() => setProgress(null));
+    sync().catch(() => {/* offline: local state still works */});
   }, [needsSetup]);
 
   const behindCount = useToAsk(config.catchUpWindowHours).length;
@@ -52,20 +50,6 @@ export default function HomeScreen() {
 
   // First sign-in on a device: run the one-time setup/permissions flow.
   if (needsSetup) return <Redirect href="/setup" />;
-
-  // First sign-in pulls a lot; show a download screen instead of a frozen-looking app.
-  if (progress && progress.total > 20 && progress.done < progress.total) {
-    const pct = Math.round((progress.done / progress.total) * 100);
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center", padding: 32 }} edges={["top"]}>
-        <Text style={{ fontSize: 22, fontWeight: "800", color: c.text, marginBottom: 8 }}>Downloading your data…</Text>
-        <Text style={{ fontSize: 14, color: c.textMuted, marginBottom: 20 }}>{progress.done.toLocaleString()} / {progress.total.toLocaleString()} hours</Text>
-        <View style={{ width: "80%", maxWidth: 360, height: 10, borderRadius: 5, backgroundColor: c.track, overflow: "hidden" }}>
-          <View style={{ width: `${pct}%`, height: "100%", backgroundColor: c.primary, borderRadius: 5 }} />
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <ScreenContainer>

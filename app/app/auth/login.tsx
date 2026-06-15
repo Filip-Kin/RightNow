@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { AuthScreen, ErrorText, Field, LinkButton, PrimaryButton } from "@/components/auth-ui";
+import { AuthScreen, ErrorText, Field, LinkButton, OrDivider, PrimaryButton, yieldToPaint } from "@/components/auth-ui";
 import { login, signInWithCode } from "@/lib/auth";
 
 export default function LoginScreen() {
@@ -15,6 +15,7 @@ export default function LoginScreen() {
   async function onPassword() {
     setError(null);
     setBusy("pw");
+    await yieldToPaint(); // paint the spinner before Argon2id blocks the JS thread
     try {
       await login(email.trim(), password);
     } catch (e) {
@@ -28,6 +29,7 @@ export default function LoginScreen() {
   async function onCode() {
     setError(null);
     setBusy("code");
+    await yieldToPaint(); // paint the spinner before Argon2id blocks the JS thread
     try {
       await signInWithCode(code);
     } catch (e) {
@@ -44,6 +46,8 @@ export default function LoginScreen() {
 
       {/* Primary: QR from another signed-in device. */}
       <PrimaryButton title="Sign in with another device (QR)" onPress={() => router.push("/auth/link")} />
+
+      <OrDivider label="or use email & password" />
 
       {/* Backup: email + password. */}
       <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" textContentType="emailAddress" placeholder="you@example.com" returnKeyType="next" />

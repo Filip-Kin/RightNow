@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { AuthScreen, ErrorText, Field, LinkButton, PrimaryButton } from "@/components/auth-ui";
+import { AuthScreen, ErrorText, Field, LinkButton, PrimaryButton, yieldToPaint } from "@/components/auth-ui";
 import { register } from "@/lib/auth";
 
 export default function SignupScreen() {
@@ -14,6 +14,7 @@ export default function SignupScreen() {
     setError(null);
     if (password && password.length < 8) return setError("Password must be at least 8 characters (or leave it blank).");
     setBusy(true);
+    await yieldToPaint(); // paint the spinner before Argon2id blocks the JS thread
     try {
       await register(email.trim(), password || undefined);
       // Show + confirm the recovery code (root-level, outside the auth group).
