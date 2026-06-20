@@ -1,7 +1,9 @@
 import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
-// kind 'session' -> normal access token (long-lived, ~7 days).
+// kind 'session' -> normal access token. Sliding expiry (SESSION_TTL_MS): every
+// authenticated request pushes expires_at back out, so an active device stays signed
+// in; it only lapses after the full idle window with no requests.
 // `token` stores SHA-256(token), never the raw token (see trpc.hashToken), so a
 // leaked tokens table can't be replayed.
 export const tokensTable = pgTable("tokens", {

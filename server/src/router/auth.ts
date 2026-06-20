@@ -7,9 +7,7 @@ import { usersTable } from '../schema/users';
 import { userKeysTable } from '../schema/user-keys';
 import { tokensTable } from '../schema/tokens';
 import { entriesTable } from '../schema/entries';
-import { protectedProcedure, publicProcedure, router, hashToken } from '../trpc';
-
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+import { protectedProcedure, publicProcedure, router, hashToken, SESSION_TTL_MS } from '../trpc';
 
 export async function mintToken(userId: string, kind: 'session', ip: string) {
     const token = randomBytes(32).toString('hex');
