@@ -2,10 +2,10 @@
 // trip is in progress. Lets the user say whether they're flying out, have just
 // arrived, or it was a ground crossing; resolution (resampling transit onto the
 // grid) happens in lib/timezone.ts.
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { resolveTravel, useTzStatus } from "@/lib/timezone";
+import { beginManualTrip, resolveTravel, useTzStatus } from "@/lib/timezone";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 export default function TravelScreen() {
@@ -13,9 +13,14 @@ export default function TravelScreen() {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { pending, transit } = useTzStatus();
+  // Arrived here from the Settings "I'm traveling now" row: show an explainer
+  // first. Travel mode is only actually started by the button below - tapping the
+  // Settings row out of curiosity no longer changes how entries get recorded.
+  const { manual } = useLocalSearchParams<{ manual?: string }>();
 
-  // Nothing to resolve (e.g. a web reload of the route) -> leave.
-  if (!pending && !transit) return <Redirect href="/" />;
+  // Nothing to resolve and not opening the manual explainer (e.g. a web reload of
+  // the route) -> leave.
+  if (!pending && !transit && !manual) return <Redirect href="/" />;
 
   function done() {
     if (router.canDismiss()) router.dismiss();
@@ -24,6 +29,41 @@ export default function TravelScreen() {
   async function choose(answer: "flying" | "arrived" | "landed" | "drove") {
     await resolveTravel(answer);
     done();
+  }
+  async function startManual() {
+    await beginManualTrip();
+    // Stay on the screen; useTzStatus flips `transit` true and re-renders into the
+    // "you're traveling / I've landed" view.
+  }
+
+  // Manual entry, no trip started yet: explain what travel mode does, then let the
+  // user opt in with an explicit second tap.
+  if (manual && !transit && !pending) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Text style={styles.title}>Traveling somewhere?</Text>
+          <Text style={styles.body}>
+            RightNow keeps your timeline in your local time. Turn on travel mode when you're about to
+            cross timezones, then keep logging as normal - on your phone or watch - during the trip.
+          </Text>
+          <Text style={styles.body}>
+            When you land, come back here and tap "I've landed" and we'll fit the hours you logged in
+            transit onto your new local timeline instead of leaving a gap.
+          </Text>
+          <Text style={styles.note}>
+            Only start this when you're actually traveling. While it's on, new entries are recorded as
+            travel hours until you land.
+          </Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={startManual}>
+            <Text style={styles.primaryText}>Start travel mode</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.ghostBtn} onPress={done}>
+            <Text style={styles.ghostText}>Not now</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -73,6 +113,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   scroll: { padding: 24, gap: 12, flexGrow: 1, justifyContent: "center" },
   title: { fontSize: 26, fontWeight: "800", color: c.text, marginBottom: 4 },
   body: { fontSize: 15, lineHeight: 21, color: c.textBody, marginBottom: 12 },
+  note: { fontSize: 13, lineHeight: 19, color: c.textMuted, fontStyle: "italic", marginBottom: 16 },
   primaryBtn: { backgroundColor: c.primary, borderRadius: 12, padding: 16 },
   primaryText: { color: c.onPrimary, fontSize: 17, fontWeight: "700" },
   primarySub: { color: c.onPrimary, fontSize: 12, opacity: 0.85, marginTop: 2 },

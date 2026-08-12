@@ -9,7 +9,7 @@ export interface DateRange {
 export type PresetKey =
   | "last7" | "last14" | "last30"
   | "thisWeek" | "lastWeek" | "thisMonth" | "lastMonth"
-  | "thisYear" | "lastYear";
+  | "thisYear" | "lastYear" | "allTime";
 
 export const PRESETS: { key: PresetKey; label: string }[] = [
   { key: "last7", label: "Last 7 Days" },
@@ -21,6 +21,7 @@ export const PRESETS: { key: PresetKey; label: string }[] = [
   { key: "lastMonth", label: "Last Month" },
   { key: "thisYear", label: "This Year" },
   { key: "lastYear", label: "Last Year" },
+  { key: "allTime", label: "All Time" },
 ];
 
 function startOfDay(d: Date): number {
@@ -39,10 +40,13 @@ function addDays(d: Date, n: number): Date {
   return x;
 }
 
-/** Resolve a preset to a concrete inclusive range, relative to `now` (local). Week starts Sunday. */
-export function presetRange(key: PresetKey, now: number): DateRange {
+/** Resolve a preset to a concrete inclusive range, relative to `now` (local). Week
+ *  starts Sunday. `earliestMs` anchors the "All Time" start (the first logged day);
+ *  it defaults to `now` (an empty all-time range) when unknown. */
+export function presetRange(key: PresetKey, now: number, earliestMs?: number): DateRange {
   const today = new Date(now);
   switch (key) {
+    case "allTime": return { startMs: startOfDay(new Date(earliestMs ?? now)), endMs: endOfDay(today) };
     case "last7": return { startMs: startOfDay(addDays(today, -6)), endMs: endOfDay(today) };
     case "last14": return { startMs: startOfDay(addDays(today, -13)), endMs: endOfDay(today) };
     case "last30": return { startMs: startOfDay(addDays(today, -29)), endMs: endOfDay(today) };
@@ -71,9 +75,9 @@ export function customRange(a: Date, b: Date): DateRange {
 }
 
 /** A short human label for a range (matches a preset when it fits, else "M/D – M/D"). */
-export function rangeLabel(range: DateRange, now: number): string {
+export function rangeLabel(range: DateRange, now: number, earliestMs?: number): string {
   for (const p of PRESETS) {
-    const r = presetRange(p.key, now);
+    const r = presetRange(p.key, now, earliestMs);
     if (r.startMs === range.startMs && r.endMs === range.endMs) return p.label;
   }
   const f = (ms: number) => { const d = new Date(ms); return `${d.getMonth() + 1}/${d.getDate()}`; };

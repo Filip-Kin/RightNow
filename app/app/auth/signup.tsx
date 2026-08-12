@@ -41,6 +41,7 @@ export default function SignupScreen() {
         textContentType="emailAddress"
         placeholder="you@example.com"
         returnKeyType="next"
+        editable={!busy}
       />
       <Field
         label="Password (optional)"
@@ -51,8 +52,9 @@ export default function SignupScreen() {
         placeholder="Add a password, or skip it"
         returnKeyType="go"
         onSubmitEditing={() => { if (email) onCreate(); }}
+        editable={!busy}
       />
-      <PrimaryButton title="Create account" onPress={onCreate} loading={busy} disabled={!email} />
+      <PrimaryButton title="Create account" onPress={onCreate} loading={busy} disabled={!email || busy} />
       <LinkButton title="I already have an account" onPress={() => router.push("/auth/login")} />
     </AuthScreen>
   );

@@ -69,6 +69,7 @@ export default function RootLayout() {
         <Stack.Screen name="session-expired" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="privacy" options={{ headerShown: false }} />
         <Stack.Screen name="delete-data" options={{ headerShown: false }} />
+        <Stack.Screen name="catchup" options={{ headerShown: false }} />
         <Stack.Screen name="travel" options={{ presentation: "modal", headerShown: false }} />
         <Stack.Screen
           name="recovery-code"

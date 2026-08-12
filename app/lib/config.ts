@@ -17,6 +17,9 @@ export interface Config {
   // How far back the catch-up flow looks for unlogged hours. Bounds the "to log"
   // count so a year-old import never demands thousands of entries.
   catchUpWindowHours: number;
+  // How many days back the deep catch-up flow (the "N days to fill" button + screen)
+  // scans for incomplete days. Bounds it so an ancient import isn't surfaced forever.
+  catchUpDaysHorizon: number;
   theme: ThemePref; // light | dark | follow system
   // Auto-fill the Sleep activity from the device's Health platform (Android Health
   // Connect for now). Only fills hours you haven't logged; never overwrites a
@@ -32,6 +35,10 @@ export interface Config {
   // Detect device-timezone changes and handle them (DST blend + the travel prompt
   // that resamples transit onto the grid). On by default.
   timezoneHandlingEnabled: boolean;
+  // Insights: only count days whose activity track is fully logged (all 24 hours).
+  // Excludes partially-logged days (e.g. sleep imported but nothing else) that would
+  // otherwise skew the aggregates. On by default.
+  insightsCompleteDaysOnly: boolean;
 }
 
 const listeners = new Set<(config: Config) => void>();
@@ -43,12 +50,14 @@ function parse(value: string | null): Config {
   config.dailyReminderEnabled ??= true;
   config.hourlyReminderEnabled ??= false;
   config.catchUpWindowHours ??= 24;
+  config.catchUpDaysHorizon ??= 60;
   config.theme ??= "system";
   config.healthSleepEnabled ??= false;
   config.lastHealthSyncAt ??= 0;
   config.deviceSetupDone ??= false;
   config.initialSyncDone ??= false;
   config.timezoneHandlingEnabled ??= true;
+  config.insightsCompleteDaysOnly ??= true;
   return config;
 }
 

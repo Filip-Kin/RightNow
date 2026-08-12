@@ -7,14 +7,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { DonutChart, HBar, LineChart } from "@/components/charts";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { Icon } from "@/components/Icon";
 import { presetRange, type DateRange } from "@/lib/dateRange";
+import { useConfig } from "@/lib/config";
 import { useEntries, type LocalEntry } from "@/lib/entries";
 import {
   activityColor, activityName, feelingColors, feelings, getActivity, useActivities,
 } from "@/lib/activities";
 import {
   MOOD_MAX, activityByHourOfDay, activityDistribution, avgMoodByActivity, bestDays, byTimeOfDay,
-  entriesInRange, moodLineSeries, weightedAvgMood,
+  entriesInRange, filterCompleteDays, moodLineSeries, slotMs, weightedAvgMood,
 } from "@/lib/stats";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
@@ -34,36 +36,53 @@ function hexToRgba(hex: string, a: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-function dayLabel(date: string): string {
+function dayLabel(date: string, showYear = false): string {
   const [y, mo, d] = date.split("-").map(Number);
-  return `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
+  const wd = WEEKDAYS[new Date(y, mo - 1, d).getDay()];
+  return showYear ? `${wd} ${mo}/${d}/${String(y).slice(2)}` : `${wd} ${mo}/${d}`;
 }
 
 export default function InsightsScreen() {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const config = useConfig();
   const entries = useEntries();
   useActivities(); // re-render on taxonomy edits (colors/names)
   const [now] = useState(() => Date.now()); // stable for presets/labels this session
   const [dr, setDr] = useState<DateRange>(() => presetRange("last30", now));
   const [width, setWidth] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const onlyComplete = config.insightsCompleteDaysOnly;
+
+  // Anchor "All Time" at the first logged hour so its range and label are right.
+  const earliestMs = useMemo(() => {
+    let min = Infinity;
+    for (const e of entries) { const t = slotMs(e.date, e.hour); if (t < min) min = t; }
+    return Number.isFinite(min) ? min : now;
+  }, [entries, now]);
+
+  // When the range spans more than one calendar year, day labels need the year to
+  // stay unambiguous (esp. the best-days list).
+  const showYear = new Date(dr.startMs).getFullYear() !== new Date(dr.endMs).getFullYear();
 
   const stats = useMemo(() => {
-    const inRange = entriesInRange(entries, dr.startMs, dr.endMs);
+    const base = entriesInRange(entries, dr.startMs, dr.endMs);
+    // Drop partially-logged days so a day that's only sleep (imported) doesn't skew
+    // the aggregates. Applied consistently across every stat, incl. the mood line.
+    const inRange = onlyComplete ? filterCompleteDays(base) : base;
     const feels: number[] = [];
     for (const e of inRange) if (e.feeling != null) feels.push(e.feeling);
     return {
       logged: inRange.length,
       avgMood: weightedAvgMood(feels),
-      series: moodLineSeries(entries, dr.startMs, dr.endMs),
+      series: moodLineSeries(inRange, dr.startMs, dr.endMs),
       dist: activityDistribution(inRange),
       byActivity: avgMoodByActivity(inRange),
       timeOfDay: byTimeOfDay(inRange),
       activityHeat: activityByHourOfDay(inRange),
       best: bestDays(inRange, 5),
     };
-  }, [entries, dr]);
+  }, [entries, dr, onlyComplete]);
 
   // Measure the chart's own container so its width matches the available space
   // exactly (it sits inside both the scroll padding and the card padding).
@@ -76,14 +95,26 @@ export default function InsightsScreen() {
         <Text style={styles.heading}>Insights</Text>
 
         <View style={styles.segmentWrap}>
-          <DateRangePicker value={dr} onChange={setDr} now={now} />
+          <DateRangePicker value={dr} onChange={setDr} now={now} earliestMs={earliestMs} />
+          <TouchableOpacity
+            style={styles.completeToggle}
+            onPress={() => { config.insightsCompleteDaysOnly = !onlyComplete; }}
+            activeOpacity={0.7}
+          >
+            <Icon
+              name={onlyComplete ? "check-box" : "check-box-outline-blank"}
+              size={18}
+              style={{ color: onlyComplete ? c.primary : c.textFaint }}
+            />
+            <Text style={styles.completeToggleText}>Fully-logged days only</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.summaryRow}>
             <Summary value={String(stats.logged)} label="hours logged" />
             <Summary value={stats.avgMood != null ? stats.avgMood.toFixed(2) : "–"} label="avg mood" />
-            <Summary value={stats.best[0] ? dayLabel(stats.best[0].date) : "–"} label="best day" />
+            <Summary value={stats.best[0] ? dayLabel(stats.best[0].date, showYear) : "–"} label="best day" />
           </View>
 
           {stats.logged === 0
@@ -91,7 +122,7 @@ export default function InsightsScreen() {
             : (
               <>
                 {/* Mood line */}
-                <Card title="Mood" subtitle={`weighted, ${stats.series.granularity === "hour" ? "hourly" : "daily"} (3-pt smoothed)`}>
+                <Card title="Mood" subtitle={`weighted, ${stats.series.granularity === "hour" ? "hourly" : "daily"} (smoothed)`}>
                   <View onLayout={onLayout}>
                     {chartW > 0 && (
                       <LineChart
@@ -173,7 +204,7 @@ export default function InsightsScreen() {
                   {stats.best.map((d) => (
                     <View key={d.date}>
                       <TouchableOpacity style={styles.bestRow} onPress={() => setExpanded(expanded === d.date ? null : d.date)}>
-                        <Text style={styles.bestDate} numberOfLines={1}>{dayLabel(d.date)}</Text>
+                        <Text style={styles.bestDate} numberOfLines={1}>{dayLabel(d.date, showYear)}</Text>
                         <View style={styles.bestStrip}>
                           <DayStrip hours={d.hours} />
                         </View>
@@ -268,7 +299,9 @@ function DayDetail({ hours }: { hours: (LocalEntry | undefined)[] }) {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   heading: { fontSize: 28, fontWeight: "800", color: c.text, paddingHorizontal: 16, paddingTop: 4 },
-  segmentWrap: { paddingHorizontal: 16, paddingVertical: 12 },
+  segmentWrap: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+  completeToggle: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
+  completeToggleText: { fontSize: 13, color: c.textMuted, fontWeight: "600" },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" },
   segItem: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: c.card },
   segItemActive: { backgroundColor: c.primary },
@@ -312,7 +345,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   flex1: { flex: 1 },
 
   bestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 },
-  bestDate: { width: 84, fontSize: 13, fontWeight: "600", color: c.textBody },
+  bestDate: { width: 96, fontSize: 13, fontWeight: "600", color: c.textBody },
   bestStrip: { flex: 1 },
   bestMood: { width: 32, fontSize: 13, fontWeight: "700", color: c.text, textAlign: "right" },
   detail: { backgroundColor: c.surface, borderRadius: 8, padding: 10, marginBottom: 8 },

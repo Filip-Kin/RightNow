@@ -1,8 +1,11 @@
 import { AnimatedText } from "@/components/AnimatedText";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { Icon } from "@/components/Icon";
 import { useTheme } from "@/lib/theme";
 import { useConfig } from "@/lib/config";
-import { sync, seedFilledFromStore, useStoreLoaded } from "@/lib/entries";
+import { sync, seedFilledFromStore, useEntries, useStoreLoaded } from "@/lib/entries";
+import { incompleteDayCount } from "@/lib/catchup";
+import { useActivities } from "@/lib/activities";
 import { useToAsk } from "@/lib/filledHours";
 import { useTzStatus } from "@/lib/timezone";
 import { useAuth } from "@/lib/auth";
@@ -10,8 +13,8 @@ import {
   requestNotificationPermissionsAsync,
   useNotificationGrantedState,
 } from "@/lib/notification";
-import { Redirect, useRouter } from "expo-router";
-import { Suspense, useEffect } from "react";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Button,
@@ -28,7 +31,22 @@ export default function HomeScreen() {
   const config = useConfig();
   const auth = useAuth();
   const storeLoaded = useStoreLoaded();
+  const entries = useEntries();
+  const activities = useActivities();
   const needsSetup = !config.deviceSetupDone;
+
+  // Deep catch-up: how many days in the look-back window aren't fully filled out.
+  // `now` is refreshed on focus so the count reflects newly-elapsed hours.
+  const [now, setNow] = useState(() => Date.now());
+  useFocusEffect(useCallback(() => setNow(Date.now()), []));
+  const isSleep = useCallback(
+    (idx: number) => !!activities.find((a) => a.index === idx)?.skipFeeling,
+    [activities],
+  );
+  const catchUpDays = useMemo(
+    () => (storeLoaded ? incompleteDayCount(entries, now, config.catchUpDaysHorizon, isSleep) : 0),
+    [entries, now, config.catchUpDaysHorizon, isSleep, storeLoaded],
+  );
 
   // Seed the shared filled-ledger from this device's logged hours as soon as the store
   // + DEK are ready, so the "behind" count is right before the network sync finishes.
@@ -121,6 +139,25 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Deep catch-up affordance: fill older gaps (days/weeks back), separate from
+          the recent hourly nudge above. Hidden while traveling. */}
+      {storeLoaded && !transit && catchUpDays > 0 && (
+        <TouchableOpacity
+          style={{
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+            marginHorizontal: 24, marginBottom: 16, paddingVertical: 12, paddingHorizontal: 16,
+            borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+          }}
+          onPress={() => router.push("/catchup")}
+        >
+          <Icon name="history" size={20} style={{ color: c.primary }} />
+          <Text style={{ fontSize: 15, fontWeight: "600", color: c.text }}>
+            Catch up · {catchUpDays} {catchUpDays === 1 ? "day" : "days"} to fill
+          </Text>
+          <Icon name="chevron-right" size={20} style={{ color: c.textFaint }} />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
     </ScreenContainer>
   );

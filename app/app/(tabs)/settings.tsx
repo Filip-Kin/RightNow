@@ -14,7 +14,7 @@ import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
-import { useTzStatus, beginManualTrip } from "@/lib/timezone";
+import { useTzStatus } from "@/lib/timezone";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 function syncText(s: SyncStatus, lastSyncAt: number, hour24: boolean): string {
@@ -220,7 +220,7 @@ export default function Settings() {
       </Text>
       <TouchableOpacity
         style={styles.navItem}
-        onPress={async () => { if (!transit) await beginManualTrip(); router.push("/travel"); }}
+        onPress={() => router.push(transit ? "/travel" : "/travel?manual=1")}
       >
         <Icon name="flight" style={{ color: c.textBody }} />
         <Text style={styles.navText}>{transit ? "I've landed" : "I'm traveling now"}</Text>

@@ -9,7 +9,7 @@ const WD = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayMs = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
 
-export function DateRangePicker({ value, onChange, now }: { value: DateRange; onChange: (r: DateRange) => void; now: number }) {
+export function DateRangePicker({ value, onChange, now, earliestMs }: { value: DateRange; onChange: (r: DateRange) => void; now: number; earliestMs?: number }) {
   const c = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [open, setOpen] = useState(false);
@@ -19,7 +19,7 @@ export function DateRangePicker({ value, onChange, now }: { value: DateRange; on
   const [end, setEnd] = useState<number | null>(null);
 
   function close() { setOpen(false); setCustom(false); setStart(null); setEnd(null); }
-  function pickPreset(key: Parameters<typeof presetRange>[0]) { onChange(presetRange(key, now)); close(); }
+  function pickPreset(key: Parameters<typeof presetRange>[0]) { onChange(presetRange(key, now, earliestMs)); close(); }
 
   function tapDay(ms: number) {
     if (start === null || end !== null) { setStart(ms); setEnd(null); }
@@ -47,7 +47,7 @@ export function DateRangePicker({ value, onChange, now }: { value: DateRange; on
   return (
     <>
       <TouchableOpacity style={styles.trigger} onPress={() => setOpen(true)} activeOpacity={0.8}>
-        <Text style={styles.triggerText}>{rangeLabel(value, now)}</Text>
+        <Text style={styles.triggerText}>{rangeLabel(value, now, earliestMs)}</Text>
         <Text style={styles.triggerCaret}>▾</Text>
       </TouchableOpacity>
 
@@ -57,7 +57,7 @@ export function DateRangePicker({ value, onChange, now }: { value: DateRange; on
             {!custom ? (
               <ScrollView>
                 {PRESETS.map((p) => {
-                  const r = presetRange(p.key, now);
+                  const r = presetRange(p.key, now, earliestMs);
                   const active = r.startMs === value.startMs && r.endMs === value.endMs;
                   return (
                     <TouchableOpacity key={p.key} style={[styles.preset, active && styles.presetActive]} onPress={() => pickPreset(p.key)}>

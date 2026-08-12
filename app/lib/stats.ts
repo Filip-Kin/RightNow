@@ -51,6 +51,58 @@ export function trailingMovingAverage(series: (number | null)[], window = 3): (n
   }
   return out;
 }
+
+/**
+ * Centered moving average (ignores null gaps). Unlike the trailing version it has
+ * no phase lag, so the smoothed mood line tracks the data instead of trailing it -
+ * which reads much cleaner on the chart. `window` is the full width; it looks
+ * floor(window/2) cells each side. A null slot stays null (no plotted point).
+ */
+export function centeredMovingAverage(series: (number | null)[], window = 3): (number | null)[] {
+  const half = Math.floor(window / 2);
+  const out: (number | null)[] = [];
+  for (let i = 0; i < series.length; i++) {
+    if (series[i] == null) { out.push(null); continue; }
+    let sum = 0, n = 0;
+    const lo = Math.max(0, i - half), hi = Math.min(series.length - 1, i + half);
+    for (let j = lo; j <= hi; j++) {
+      const v = series[j];
+      if (v != null) { sum += v; n += 1; }
+    }
+    out.push(n > 0 ? sum / n : null);
+  }
+  return out;
+}
+// #endregion
+
+// #region complete-day filtering
+/**
+ * The set of dates ("YYYY-M-D") where every hour of the day has an activity logged
+ * (all 24 cells non-null on activity). Feeling may be blank (e.g. while asleep) - we
+ * only require the activity track to be complete.
+ */
+export function completeDaySet(entries: LocalEntry[]): Set<string> {
+  const byDay = new Map<string, Set<number>>();
+  for (const e of entries) {
+    if (e.activity == null) continue;
+    let hrs = byDay.get(e.date);
+    if (!hrs) { hrs = new Set(); byDay.set(e.date, hrs); }
+    hrs.add(e.hour);
+  }
+  const out = new Set<string>();
+  for (const [date, hrs] of byDay) if (hrs.size === 24) out.add(date);
+  return out;
+}
+
+/**
+ * Keep only entries on days whose activity track is fully logged. Drops days that
+ * are only partially filled (e.g. sleep auto-imported but nothing else logged),
+ * which would otherwise skew the aggregates toward the handful of logged hours.
+ */
+export function filterCompleteDays(entries: LocalEntry[]): LocalEntry[] {
+  const days = completeDaySet(entries);
+  return entries.filter((e) => days.has(e.date));
+}
 // #endregion
 
 // #region time helpers
@@ -234,7 +286,11 @@ export function moodLineSeries(entries: LocalEntry[], startMs: number, endMs: nu
       const idx = Math.round((slotMs(e.date, e.hour) - startMs) / HOUR_MS);
       if (idx >= 0 && idx < slots) raw[idx] = weightedMood(e.feeling);
     }
-    const smoothed = trailingMovingAverage(raw, 3);
+    // Smoothing width grows with the span so a wide view (e.g. 30 days of hourly
+    // points) reads as a trend line, not hour-to-hour jitter, while a 1-day view
+    // stays responsive. ~1 cell of window per day, capped.
+    const window = Math.min(25, Math.max(3, Math.round(slots / 24)));
+    const smoothed = centeredMovingAverage(raw, window);
     const points: MoodPoint[] = [];
     for (let i = 0; i < smoothed.length; i++) {
       const v = smoothed[i];
@@ -257,7 +313,8 @@ export function moodLineSeries(entries: LocalEntry[], startMs: number, endMs: nu
   for (const [dayIdx, feels] of feelsByDayIdx) {
     if (dayIdx >= 0 && dayIdx < days) raw[dayIdx] = weightedAvgMood(feels);
   }
-  const smoothed = trailingMovingAverage(raw, 3);
+  const window = Math.min(9, Math.max(3, Math.round(days / 20)));
+  const smoothed = centeredMovingAverage(raw, window);
   const points: MoodPoint[] = [];
   for (let i = 0; i < smoothed.length; i++) {
     const v = smoothed[i];

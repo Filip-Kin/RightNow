@@ -45,20 +45,21 @@ export default function LoginScreen() {
       <ErrorText>{error}</ErrorText>
 
       {/* Primary: QR from another signed-in device. */}
-      <PrimaryButton title="Sign in with another device (QR)" onPress={() => router.push("/auth/link")} />
+      <PrimaryButton title="Sign in with another device (QR)" onPress={() => router.push("/auth/link")} disabled={busy !== null} />
 
       <OrDivider label="or use email & password" />
 
-      {/* Backup: email + password. */}
-      <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" textContentType="emailAddress" placeholder="you@example.com" returnKeyType="next" />
-      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry textContentType="password" placeholder="Your password" returnKeyType="go" onSubmitEditing={() => { if (email && password) onPassword(); }} />
-      <PrimaryButton title="Sign in with email & password" onPress={onPassword} loading={busy === "pw"} disabled={!email || !password} />
+      {/* Backup: email + password. Inputs lock while a sign-in is in flight (the
+          Argon2id derive can take a few seconds) so it's clear something's happening. */}
+      <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" textContentType="emailAddress" placeholder="you@example.com" returnKeyType="next" editable={busy === null} />
+      <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry textContentType="password" placeholder="Your password" returnKeyType="go" onSubmitEditing={() => { if (email && password) onPassword(); }} editable={busy === null} />
+      <PrimaryButton title="Sign in with email & password" onPress={onPassword} loading={busy === "pw"} disabled={!email || !password || busy !== null} />
 
       {/* Last resort: recovery code, hidden until the others are exhausted. */}
       {showCode ? (
         <>
-          <Field label="Recovery code" value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX-…" returnKeyType="go" onSubmitEditing={() => { if (code) onCode(); }} />
-          <PrimaryButton title="Sign in with recovery code" onPress={onCode} loading={busy === "code"} disabled={!code} />
+          <Field label="Recovery code" value={code} onChangeText={setCode} autoCapitalize="characters" placeholder="XXXX-XXXX-XXXX-…" returnKeyType="go" onSubmitEditing={() => { if (code) onCode(); }} editable={busy === null} />
+          <PrimaryButton title="Sign in with recovery code" onPress={onCode} loading={busy === "code"} disabled={!code || busy !== null} />
         </>
       ) : (
         <LinkButton title="Can't use those? Use your recovery code" onPress={() => setShowCode(true)} />

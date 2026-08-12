@@ -28,8 +28,11 @@ export function AuthScreen({ title, subtitle, children }: { title: string; subti
 export function Field({ label, ...props }: { label: string } & TextInputProps) {
     const c = useTheme();
     const styles = useThemedStyles(makeStyles);
+    // Dim the field when it's been disabled (e.g. while a sign-in is in flight) so
+    // it's obvious the form is busy and not accepting input.
+    const dim = props.editable === false;
     return (
-        <View style={{ marginBottom: 14 }}>
+        <View style={{ marginBottom: 14, opacity: dim ? 0.5 : 1 }}>
             <Text style={styles.label}>{label}</Text>
             <TextInput
                 style={styles.input}

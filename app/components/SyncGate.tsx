@@ -4,11 +4,10 @@
 // entries.sync() flips initialSyncDone on success, which re-renders the layout away
 // from this gate. Offline/error gets an escape hatch so a first launch can't brick.
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, AppState, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getSyncStatus, sync, useSyncProgress, useSyncStatus } from "@/lib/entries";
 import { useConfig } from "@/lib/config";
-import { SyncBar } from "@/components/SyncBar";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 export function SyncGate() {
@@ -18,9 +17,16 @@ export function SyncGate() {
   const progress = useSyncProgress();
   const { status } = useSyncStatus();
 
-  // Kick a sync if one isn't already running (e.g. relaunched mid-first-sync).
+  // Kick a sync if one isn't already running, and re-kick whenever the app returns
+  // to the foreground. Switching apps mid-sync can drop the in-flight request (the
+  // OS suspends the process); the pull is cursored and each page is persisted, so a
+  // re-kick resumes from where it left off and just finishes - instead of stranding
+  // the user on the "couldn't reach the server" screen when they come back.
   useEffect(() => {
-    if (getSyncStatus().status !== "syncing") void sync().catch(() => {});
+    const kick = () => { if (getSyncStatus().status !== "syncing") void sync().catch(() => {}); };
+    kick();
+    const sub = AppState.addEventListener("change", (s) => { if (s === "active") kick(); });
+    return () => sub.remove();
   }, []);
 
   const failed = status === "offline" || status === "error";
@@ -50,7 +56,9 @@ export function SyncGate() {
             <Text style={styles.subtitle}>This only happens once on this device. Hang tight.</Text>
             {progress && progress.total > 0 ? (
               <>
-                <Text style={styles.count}>{progress.done.toLocaleString()} / {progress.total.toLocaleString()}</Text>
+                <Text style={styles.count}>
+                  {progress.phase === "push" ? "Uploading" : "Downloading"} {progress.done.toLocaleString()} / {progress.total.toLocaleString()}
+                </Text>
                 <View style={styles.track}>
                   <View style={[styles.fill, { width: `${pct}%` }]} />
                 </View>
@@ -58,8 +66,6 @@ export function SyncGate() {
             ) : (
               <ActivityIndicator color={c.primary} style={{ marginTop: 24 }} />
             )}
-            <View style={{ height: 24 }} />
-            <SyncBar />
           </>
         )}
       </View>
