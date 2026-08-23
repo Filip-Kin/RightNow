@@ -25,5 +25,7 @@ jobs:
 
       - name: Trigger Coolify deploy (cloud pulls the new image)
         run: |
-          curl -fsSL -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+          # Coolify changed this endpoint from GET to POST (a GET now 405s), so the
+          # deploy step failed even though the image built and pushed fine.
+          curl -fsSL -X POST -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             "https://panel.filipkin.com/api/v1/deploy?uuid=${{ secrets.COOLIFY_APP_UUID }}&force=false"
