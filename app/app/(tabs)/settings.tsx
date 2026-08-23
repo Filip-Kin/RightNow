@@ -14,7 +14,7 @@ import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
-import { useTzStatus, beginManualTrip, resolveTravel } from "@/lib/timezone";
+import { useTzStatus, beginManualTrip, resolveTravel, getTravelPreview } from "@/lib/timezone";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 function syncText(s: SyncStatus, lastSyncAt: number, hour24: boolean): string {
@@ -52,6 +52,7 @@ export default function Settings() {
   const [sleepBusy, setSleepBusy] = useState(false);
   const [sleepMsg, setSleepMsg] = useState<string | null>(null);
   const [sleepModal, setSleepModal] = useState(false);
+  const [travelModal, setTravelModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
   const [exportYearN, setExportYearN] = useState(() => new Date().getFullYear());
   const syncing = syncState.status === "syncing";
@@ -218,19 +219,12 @@ export default function Settings() {
         Keeps your timeline in local time. Adjusts for daylight saving automatically and, when you
         fly, fits your travel hours onto the grid instead of leaving a gap.
       </Text>
-      <View style={styles.row}>
-        <Text style={[styles.navText, { flex: 1 }]}>Travel mode</Text>
-        <Switch
-          value={transit}
-          onValueChange={(v) => { void (v ? beginManualTrip() : resolveTravel("landed")); }}
-          trackColor={{ true: c.primary, false: c.border }}
-        />
-      </View>
-      <Text style={styles.hint}>
-        {transit
-          ? "On. Keep logging as normal while you travel - the app works as usual. Turn this off when you arrive and your travel hours get fitted onto the grid."
-          : "Turn on before you cross timezones. Your timeline stays in local time, and your travel hours get fitted to the grid when you arrive."}
-      </Text>
+      <TouchableOpacity style={styles.navItem} onPress={() => setTravelModal(true)}>
+        <Icon name="flight" style={{ color: c.textBody }} />
+        <Text style={styles.navText}>Travel mode</Text>
+        <Text style={styles.navStatus}>{transit ? "On" : "Off"}</Text>
+        <Icon name="chevron-right" style={{ color: c.textFaint }} />
+      </TouchableOpacity>
 
       <Text style={styles.label}>Data</Text>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>
@@ -316,6 +310,87 @@ export default function Settings() {
             <TouchableOpacity style={styles.sleepDone} onPress={() => setSleepModal(false)}>
               <Text style={styles.sleepDoneText}>Done</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={travelModal} transparent animationType="fade" onRequestClose={() => setTravelModal(false)}>
+        <View style={styles.sleepBackdrop}>
+          <View style={styles.sleepCard}>
+            {transit ? (
+              <>
+                <Text style={styles.sleepTitle}>You're traveling</Text>
+                <Text style={styles.sleepDesc}>
+                  Keep logging as normal - the app works as usual. When you arrive, end travel mode and
+                  the hours you logged in transit get fitted onto your grid in your new local time.
+                </Text>
+                {(() => {
+                  const p = getTravelPreview();
+                  if (!p) return null;
+                  const blocks = (n: number, color: string) => {
+                    const cap = 12;
+                    const shown = Math.min(n, cap);
+                    return (
+                      <View style={styles.travelBlocks}>
+                        {Array.from({ length: shown }).map((_, i) => (
+                          <View key={i} style={[styles.travelBlock, { backgroundColor: color }]} />
+                        ))}
+                        {n > cap ? <Text style={styles.travelMore}>+{n - cap}</Text> : null}
+                        {n === 0 ? <Text style={styles.travelMore}>none yet</Text> : null}
+                      </View>
+                    );
+                  };
+                  return (
+                    <View style={styles.travelPreview}>
+                      <Text style={styles.travelPreviewLabel}>
+                        {p.mode === "compress"
+                          ? `Flying west: your ${p.logged} travel hours will compress into ${p.fitted} grid hour${p.fitted === 1 ? "" : "s"}.`
+                          : p.mode === "expand"
+                            ? `Flying east: your ${p.logged} travel hours will stretch into ${p.fitted} grid hours.`
+                            : `Your ${p.logged} travel hour${p.logged === 1 ? "" : "s"} fit as-is so far. Cross a timezone and this updates.`}
+                      </Text>
+                      <View style={styles.travelRow}>
+                        <Text style={styles.travelRowLabel}>Logged</Text>
+                        {blocks(p.logged, c.textMuted)}
+                      </View>
+                      <Text style={styles.travelThen}>then fitted to your grid:</Text>
+                      <View style={styles.travelRow}>
+                        <Text style={styles.travelRowLabel}>Grid</Text>
+                        {blocks(p.fitted, c.primary)}
+                      </View>
+                    </View>
+                  );
+                })()}
+                <TouchableOpacity
+                  style={styles.sleepDone}
+                  onPress={() => { void resolveTravel("landed"); setTravelModal(false); }}
+                >
+                  <Text style={styles.sleepDoneText}>End travel & fit my hours</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.travelGhost} onPress={() => setTravelModal(false)}>
+                  <Text style={styles.travelGhostText}>Keep traveling</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.sleepTitle}>Travel mode</Text>
+                <Text style={styles.sleepDesc}>
+                  RightNow keeps your timeline in your local time. Turn this on before you cross
+                  timezones, then keep logging as normal during the trip - the app works as usual.
+                </Text>
+                <Text style={styles.sleepDesc}>
+                  When you arrive, come back here and end travel mode. We fit the hours you logged in
+                  transit onto your new local timeline instead of leaving a gap: compressing them if
+                  you flew west, stretching them if you flew east.
+                </Text>
+                <TouchableOpacity style={styles.sleepDone} onPress={() => { void beginManualTrip(); }}>
+                  <Text style={styles.sleepDoneText}>Start travel mode</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.travelGhost} onPress={() => setTravelModal(false)}>
+                  <Text style={styles.travelGhostText}>Not now</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -408,6 +483,16 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   sleepTitle: { fontSize: 20, fontWeight: "800", color: c.text, marginBottom: 12 },
   sleepDone: { marginTop: 18, alignSelf: "flex-end", paddingVertical: 8, paddingHorizontal: 18, borderRadius: 8, backgroundColor: c.primary },
   sleepDoneText: { color: c.onPrimary, fontWeight: "700", fontSize: 15 },
+  travelPreview: { marginTop: 16, padding: 14, borderRadius: 10, backgroundColor: c.bg, borderWidth: 1, borderColor: c.cardBorder },
+  travelPreviewLabel: { fontSize: 13, color: c.text, fontWeight: "600", marginBottom: 12, lineHeight: 18 },
+  travelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  travelRowLabel: { width: 44, fontSize: 12, color: c.textMuted },
+  travelBlocks: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 },
+  travelBlock: { width: 12, height: 18, borderRadius: 3 },
+  travelMore: { fontSize: 12, color: c.textMuted, marginLeft: 2 },
+  travelThen: { fontSize: 12, color: c.textMuted, marginVertical: 6, marginLeft: 44 },
+  travelGhost: { marginTop: 6, alignSelf: "center", padding: 10 },
+  travelGhostText: { color: c.textMuted, fontSize: 14, fontWeight: "600" },
   spacer: { height: 28 },
   account: { marginTop: 28, paddingTop: 24, borderTopWidth: 1, borderTopColor: c.cardBorder },
   accountText: { fontSize: 14, color: c.textMuted, marginBottom: 8 },

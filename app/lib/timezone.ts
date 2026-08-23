@@ -280,6 +280,28 @@ export function getPendingTravel(): PendingTravel | null {
   return state?.pending ?? null;
 }
 
+export interface TravelPreview {
+  logged: number; // hours you logged in transit
+  fitted: number; // grid slots they'll occupy after resampling
+  mode: "compress" | "expand" | "same";
+}
+
+/** What ending the current trip will do to the grid, without applying it: how many
+ *  logged transit hours map onto how many local grid slots. Drives the end-of-travel
+ *  explainer's compress/expand graphic. Returns null when no trip is active. */
+export function getTravelPreview(now: number = Date.now()): TravelPreview | null {
+  const s = state;
+  if (!s?.trip) return null;
+  const startLocal = localPseudoMs(s.trip.startAbsMs, s.trip.fromOffsetMin);
+  const nowLocal = localPseudoMs(now, currentOffsetMin());
+  const span = measuredSpanHours(startLocal, nowLocal, capHours());
+  const segment = getTransitCells().map((c) => ({ activity: c.activity, feeling: c.feeling }));
+  const logged = segment.length;
+  const fitted = resampleTransit(segment, span).length;
+  const mode = fitted > logged ? "expand" : fitted < logged ? "compress" : "same";
+  return { logged, fitted, mode };
+}
+
 /** Re-renders when the tz state changes; returns { pending, transit }. */
 export function useTzStatus(): { pending: boolean; transit: boolean } {
   const [, force] = useState(0);
