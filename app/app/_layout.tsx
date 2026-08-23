@@ -37,11 +37,16 @@ export default function RootLayout() {
         }
       } catch { /* never block startup on tz handling */ }
     }
-    restoreSession();
-    maybeSyncHealthOnForeground();
+    // Health sleep-fill needs the DEK, which restoreSession only sets once secure
+    // storage resolves. Running it before (cold start) throws "Locked", fills nothing
+    // and never retries - the "sleep only shows after I close and reopen" bug. Chain
+    // it (and the queue drain, which also needs the key) onto the restore.
+    restoreSession().then(() => {
+      maybeSyncHealthOnForeground();
+      drainQuickLogQueue(); // sync any answers the overlay/watch queued while we were away
+    });
     refreshHourlyReminder();
     startTaxonomyMirror(); // keep the overlay's plaintext activity mirror fresh
-    drainQuickLogQueue(); // sync any answers the overlay/watch queued while we were away
     checkLaunchRoute();
     checkTimezone();
     const sub = AppState.addEventListener("change", (s) => {
