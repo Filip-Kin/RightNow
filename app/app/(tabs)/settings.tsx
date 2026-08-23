@@ -14,7 +14,7 @@ import { isHealthAvailable, openHealthSettings } from "@/lib/health";
 import { exportYearPdf, exportYearCsv } from "@/lib/exportYear";
 import { syncHealthSleep } from "@/lib/healthSync";
 import { getActivities, activityColor } from "@/lib/activities";
-import { useTzStatus } from "@/lib/timezone";
+import { useTzStatus, beginManualTrip, resolveTravel } from "@/lib/timezone";
 import { useTheme, useThemedStyles, type Colors } from "@/lib/theme";
 
 function syncText(s: SyncStatus, lastSyncAt: number, hour24: boolean): string {
@@ -218,14 +218,19 @@ export default function Settings() {
         Keeps your timeline in local time. Adjusts for daylight saving automatically and, when you
         fly, fits your travel hours onto the grid instead of leaving a gap.
       </Text>
-      <TouchableOpacity
-        style={styles.navItem}
-        onPress={() => router.push(transit ? "/travel" : "/travel?manual=1")}
-      >
-        <Icon name="flight" style={{ color: c.textBody }} />
-        <Text style={styles.navText}>{transit ? "I've landed" : "I'm traveling now"}</Text>
-        <Icon name="chevron-right" style={{ color: c.textFaint }} />
-      </TouchableOpacity>
+      <View style={styles.row}>
+        <Text style={[styles.navText, { flex: 1 }]}>Travel mode</Text>
+        <Switch
+          value={transit}
+          onValueChange={(v) => { void (v ? beginManualTrip() : resolveTravel("landed")); }}
+          trackColor={{ true: c.primary, false: c.border }}
+        />
+      </View>
+      <Text style={styles.hint}>
+        {transit
+          ? "On. Keep logging as normal while you travel - the app works as usual. Turn this off when you arrive and your travel hours get fitted onto the grid."
+          : "Turn on before you cross timezones. Your timeline stays in local time, and your travel hours get fitted to the grid when you arrive."}
+      </Text>
 
       <Text style={styles.label}>Data</Text>
       <TouchableOpacity style={styles.navItem} onPress={() => router.push("/activities")}>

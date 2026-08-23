@@ -4,6 +4,20 @@
 // encrypted store even when the app UI is killed.
 import { AppRegistry, NativeModules, Platform } from "react-native";
 
+// Global JS error handler: log any uncaught JS error so it's diagnosable instead of
+// vanishing, then delegate to the previous handler so we don't change fatal behavior.
+// This covers the JS layer only; native-module crashes bypass JS entirely.
+{
+  const EU = global.ErrorUtils;
+  if (EU && typeof EU.setGlobalHandler === "function") {
+    const prev = typeof EU.getGlobalHandler === "function" ? EU.getGlobalHandler() : null;
+    EU.setGlobalHandler((error, isFatal) => {
+      try { console.error("[global-js-error]", isFatal ? "FATAL" : "non-fatal", error); } catch {}
+      if (prev) prev(error, isFatal);
+    });
+  }
+}
+
 if (Platform.OS === "android") {
   // Name must match the task the native MyHeadlessJsService returns from
   // getTaskConfig() (see the withQuickLogOverlay config plugin).

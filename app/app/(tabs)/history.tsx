@@ -392,6 +392,10 @@ export default function HistoryScreen() {
 function NoteEditor({ date, initial, onClose }: { date: string; initial: string; onClose: () => void }) {
   const styles = useThemedStyles(makeStyles);
   const [text, setText] = useState(initial);
+  // autoFocus does not reliably raise the keyboard inside a Modal (the input focuses
+  // but the soft keyboard stays down). Focus explicitly once the modal has shown.
+  const inputRef = useRef<TextInput>(null);
+  const focusInput = () => setTimeout(() => inputRef.current?.focus(), 100);
   const [y, mo, d] = date.split("-").map(Number);
   const label = `${WEEKDAYS[new Date(y, mo - 1, d).getDay()]} ${mo}/${d}`;
   function save() {
@@ -399,7 +403,7 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
     onClose();
   }
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} onShow={focusInput}>
       <KeyboardAvoidingView
         style={styles.noteBackdrop}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -408,6 +412,7 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
           <Text style={styles.noteTitle}>Note · {label}</Text>
           <Text style={styles.noteHint}>What did you do this day? Anything worth remembering.</Text>
           <TextInput
+            ref={inputRef}
             style={styles.noteInput}
             value={text}
             onChangeText={setText}

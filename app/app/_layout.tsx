@@ -12,6 +12,7 @@ import { startTaxonomyMirror, drainQuickLogQueue } from "@/lib/quickLog";
 import { reloadFilled } from "@/lib/filledHours";
 import { detectTimezoneChange, drainPendingTz, hasPendingTravel } from "@/lib/timezone";
 import { useTheme } from "@/lib/theme";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function RootLayout() {
   const c = useTheme();
@@ -66,6 +67,7 @@ export default function RootLayout() {
   // wrapping the navigator here, which would hide the bottom tab bar.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
       <Stack screenOptions={{ contentStyle: { backgroundColor: c.bg } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="setup" options={{ headerShown: false, gestureEnabled: false }} />
@@ -82,6 +84,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="+not-found" />
       </Stack>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

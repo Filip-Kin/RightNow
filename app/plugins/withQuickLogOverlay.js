@@ -223,11 +223,13 @@ import android.content.Intent
 
 class QuickLogAlarmReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
-    QuickLogScheduler.postNotification(context)
+    // An uncaught throw here crashes the whole app process (broadcast receiver), so
+    // guard each step and always try to re-arm the next hour.
+    try { QuickLogScheduler.postNotification(context) } catch (e: Exception) {}
     // Wake the headless JS task to fill sleep from Health Connect in the background,
     // which then quietly refreshes/clears this notification if the hours were asleep.
-    HeadlessKick.kick(context)
-    QuickLogScheduler.arm(context) // chain the next hour
+    try { HeadlessKick.kick(context) } catch (e: Exception) {}
+    try { QuickLogScheduler.arm(context) } catch (e: Exception) {} // chain the next hour
   }
 }
 `;
@@ -240,7 +242,7 @@ import android.content.Intent
 
 class QuickLogBootReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
-    if (QuickLogScheduler.isEnabled(context)) QuickLogScheduler.arm(context)
+    try { if (QuickLogScheduler.isEnabled(context)) QuickLogScheduler.arm(context) } catch (e: Exception) {}
   }
 }
 `;
@@ -623,8 +625,10 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
   }
 
   @ReactMethod fun canDrawOverlay(promise: Promise) {
-    val ok = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(reactApplicationContext)
-    promise.resolve(ok)
+    try {
+      val ok = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(reactApplicationContext)
+      promise.resolve(ok)
+    } catch (e: Exception) { promise.resolve(false) }
   }
 
   @ReactMethod fun requestOverlayPermission(promise: Promise) {
