@@ -23,7 +23,7 @@ const HISTORY_PERM = { accessType: "read", recordType: "ReadHealthDataHistory" }
 // Lets the headless hourly task read sleep while the app is backgrounded/killed, so
 // the nudge fills sleep without you opening the app. Optional: a foreground sync
 // still works without it, so we request it but never gate sleep read on it.
-const BACKGROUND_PERM = { accessType: "read", recordType: "ReadHealthDataInBackground" } as const;
+const BACKGROUND_PERM = { accessType: "read", recordType: "BackgroundAccessPermission" } as const;
 // Tagged so it's greppable in logcat (ReactNativeJS) while debugging on-device.
 // Dev-only so a release build doesn't log permission/session detail to logcat.
 const log = (...a: unknown[]) => { if (__DEV__) console.warn("[health]", ...a); };
@@ -64,7 +64,7 @@ function hasHistory(perms: { accessType: string; recordType: string }[]): boolea
 }
 
 function hasBackground(perms: { accessType: string; recordType: string }[]): boolean {
-  return perms.some((p) => p.accessType === "read" && p.recordType === "ReadHealthDataInBackground");
+  return perms.some((p) => p.accessType === "read" && p.recordType === "BackgroundAccessPermission");
 }
 
 export async function hasSleepPermission(): Promise<boolean> {
