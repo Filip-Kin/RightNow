@@ -78,9 +78,13 @@ async function load(): Promise<TzState> {
   return state;
 }
 
-function save(): void {
+/** Persist + notify. Returns the flush promise so callers driven by a user action
+ *  (starting/ending a trip) can AWAIT durability before the UI moves on - closing
+ *  the app right after the tap must not lose the write. Fire-and-forget callers
+ *  (foreground detection) can ignore the promise; they re-detect next time. */
+function save(): Promise<void> {
   const snapshot = JSON.stringify(state);
-  void (async () => {
+  const flush = (async () => {
     try {
       const { File, Paths } = await fs();
       const f = new File(Paths.document, STATE_FILE);
@@ -89,6 +93,7 @@ function save(): void {
     } catch { /* best-effort; reloaded next foreground */ }
   })();
   emit();
+  return flush;
 }
 
 /** Device offset in minutes, east-positive (UTC+13 -> +780). */
@@ -205,7 +210,7 @@ export async function resolveTravel(answer: TravelAnswer, now: number = Date.now
     // Enter live transit mode; resolve later via "I've landed".
     if (s.pending) {
       s.trip = { startAbsMs: s.pending.baselineAtMs, fromOffsetMin: s.pending.fromOffsetMin, startedAtMs: s.pending.detectedAtMs };
-      s.pending = null; save();
+      s.pending = null; await save(); // durable before the user can close the app
     }
     return;
   }
@@ -261,7 +266,7 @@ export async function beginManualTrip(now: number = Date.now()): Promise<void> {
   const s = await load();
   s.trip = { startAbsMs: s.lastObservedAtMs || now, fromOffsetMin: s.lastOffsetMin ?? currentOffsetMin(), startedAtMs: now };
   s.pending = null;
-  save();
+  await save(); // durable before the user can close the app
 }
 
 // #region reactive accessors

@@ -34,6 +34,7 @@ const QuickLog: {
   pushTaxonomy(json: string): Promise<boolean>;
   pushReminder(json: string): Promise<boolean>;
   clearPrompt(): Promise<boolean>;
+  refreshNotification(): Promise<boolean>;
 } | undefined = NativeModules.QuickLog;
 
 /** Answered the hourly prompt in-app: clear the phone notification and tell the
@@ -144,6 +145,9 @@ export async function refreshHourlyReminder(now: number = Date.now()): Promise<v
     trimFilled(now);
     writeReminder({ enabled: true, cap });
     await QuickLog?.arm().catch(() => {});
+    // The ledger may have just changed (a sleep-fill / a logged hour) - re-evaluate
+    // the live notification so it drops filled hours instead of showing a stale count.
+    await QuickLog?.refreshNotification().catch(() => {});
     await registerTask();
   } finally {
     refreshing = false;

@@ -159,8 +159,13 @@ object QuickLogScheduler {
     else "What are you doing right now? Tap to log this hour."
   }
 
-  fun postNotification(ctx: Context) {
-    if (!isEnabled(ctx)) return
+  // reAlert=false updates the already-shown notification quietly (no buzz), used when
+  // a background sleep-fill just changed what's still pending.
+  fun postNotification(ctx: Context, reAlert: Boolean = true) {
+    if (!isEnabled(ctx)) { NotificationManagerCompat.from(ctx).cancel(NOTIF_ID); return }
+    // Nothing left unfilled in the window (e.g. every elapsed hour was sleep and got
+    // auto-filled) -> don't nag; clear any notification already showing.
+    if (pendingSlots(ctx, capFor(ctx)).isEmpty()) { NotificationManagerCompat.from(ctx).cancel(NOTIF_ID); return }
     ensureChannel(ctx)
     // Tap -> start the overlay service directly (no activity = no focus steal).
     val tapPi = PendingIntent.getService(ctx, 1, Intent(ctx, QuickLogService::class.java), FLAGS)
@@ -178,7 +183,7 @@ object QuickLogScheduler {
       .setContentText(bodyText(ctx))
       .setContentIntent(tapPi)
       .setAutoCancel(true)
-      .setOnlyAlertOnce(false)
+      .setOnlyAlertOnce(!reAlert)
       .setPriority(NotificationCompat.PRIORITY_MAX)
       // Don't auto-bridge to the watch: the Wear app posts its own prompt (whose tap
       // opens the watch UI). Bridging would show a duplicate on the wrist.
@@ -188,6 +193,24 @@ object QuickLogScheduler {
     // Trigger the watch prompt for this hour (WearBridge lives in withWearBridge).
     // Carries the shared filled-ledger so the watch computes the same pending set.
     try { WearBridge.putPrompt(ctx, filledRaw(ctx), capFor(ctx)) } catch (e: Exception) {}
+  }
+
+  private fun isNotificationShowing(ctx: Context): Boolean {
+    return try {
+      val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      nm.activeNotifications.any { it.id == NOTIF_ID }
+    } catch (e: Exception) { false }
+  }
+
+  // Re-evaluate the posted notification against the current ledger (quietly, no new
+  // buzz). Called from JS after a sleep-fill / a logged hour: updates the count, or
+  // clears the notification when every pending hour has been filled. Never SPAWNS a
+  // notification from a refresh (posting the hourly nudge is the alarm's job), so
+  // opening the app or logging in-app can't pop a nudge at you.
+  fun refreshNotification(ctx: Context) {
+    if (!isEnabled(ctx)) { NotificationManagerCompat.from(ctx).cancel(NOTIF_ID); return }
+    if (pendingSlots(ctx, capFor(ctx)).isEmpty()) { NotificationManagerCompat.from(ctx).cancel(NOTIF_ID); return }
+    if (isNotificationShowing(ctx)) postNotification(ctx, reAlert = false)
   }
 }
 `;
@@ -201,6 +224,9 @@ import android.content.Intent
 class QuickLogAlarmReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent?) {
     QuickLogScheduler.postNotification(context)
+    // Wake the headless JS task to fill sleep from Health Connect in the background,
+    // which then quietly refreshes/clears this notification if the hours were asleep.
+    HeadlessKick.kick(context)
     QuickLogScheduler.arm(context) // chain the next hour
   }
 }
@@ -642,6 +668,15 @@ class QuickLogModule(rc: ReactApplicationContext) : ReactContextBaseJavaModule(r
     try {
       NotificationManagerCompat.from(reactApplicationContext).cancel(QuickLogScheduler.NOTIF_ID)
       WearBridge.notifyCleared(reactApplicationContext)
+      promise.resolve(true)
+    } catch (e: Exception) { promise.resolve(false) }
+  }
+
+  // Recompute the posted notification against the current ledger (updates the count or
+  // clears it when nothing's left to ask). Called from JS after a background sleep-fill.
+  @ReactMethod fun refreshNotification(promise: Promise) {
+    try {
+      QuickLogScheduler.refreshNotification(reactApplicationContext)
       promise.resolve(true)
     } catch (e: Exception) { promise.resolve(false) }
   }

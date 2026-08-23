@@ -20,6 +20,10 @@ const SLEEP_PERM = { accessType: "read", recordType: "SleepSession" } as const;
 // backfill can reach everything Health Connect actually holds (years, not 30 days).
 // Best-effort: sleep sync still runs if only this extra grant is missing.
 const HISTORY_PERM = { accessType: "read", recordType: "ReadHealthDataHistory" } as const;
+// Lets the headless hourly task read sleep while the app is backgrounded/killed, so
+// the nudge fills sleep without you opening the app. Optional: a foreground sync
+// still works without it, so we request it but never gate sleep read on it.
+const BACKGROUND_PERM = { accessType: "read", recordType: "ReadHealthDataInBackground" } as const;
 // Tagged so it's greppable in logcat (ReactNativeJS) while debugging on-device.
 // Dev-only so a release build doesn't log permission/session detail to logcat.
 const log = (...a: unknown[]) => { if (__DEV__) console.warn("[health]", ...a); };
@@ -59,6 +63,10 @@ function hasHistory(perms: { accessType: string; recordType: string }[]): boolea
   return perms.some((p) => p.accessType === "read" && p.recordType === "ReadHealthDataHistory");
 }
 
+function hasBackground(perms: { accessType: string; recordType: string }[]): boolean {
+  return perms.some((p) => p.accessType === "read" && p.recordType === "ReadHealthDataInBackground");
+}
+
 export async function hasSleepPermission(): Promise<boolean> {
   try {
     await ensureInit();
@@ -76,14 +84,14 @@ export async function requestSleepPermission(): Promise<boolean> {
   await ensureInit();
   const granted = await getGrantedPermissions();
   log("granted before request:", JSON.stringify(granted));
-  // Re-prompt if EITHER grant is missing. Sleep was likely granted on a prior
-  // build before the history permission existed, so gating only on sleep would
-  // never surface the new history prompt to an existing user.
-  if (hasSleepRead(granted) && hasHistory(granted)) return true;
-  // Request history together with sleep so the OS shows both in one prompt. The
-  // history grant is optional: we gate only on sleep read being present.
-  const result = await requestPermission([SLEEP_PERM, HISTORY_PERM]);
-  log("requestPermission result:", JSON.stringify(result), "history granted:", hasHistory(result));
+  // Re-prompt if ANY grant is missing. Sleep was likely granted on a prior build
+  // before the history/background permissions existed, so gating only on sleep would
+  // never surface the newer prompts to an existing user.
+  if (hasSleepRead(granted) && hasHistory(granted) && hasBackground(granted)) return true;
+  // Request history + background together with sleep so the OS shows them in one
+  // prompt. Both extras are optional: we gate only on sleep read being present.
+  const result = await requestPermission([SLEEP_PERM, HISTORY_PERM, BACKGROUND_PERM]);
+  log("requestPermission result:", JSON.stringify(result), "history:", hasHistory(result), "background:", hasBackground(result));
   return hasSleepRead(result);
 }
 

@@ -3,7 +3,7 @@
 // that hour (or the feeling color, toggled). Tap a cell for its detail. Reads the
 // local decrypted store (useEntries) + the custom taxonomy (useActivities).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -400,7 +400,10 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
   }
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.noteBackdrop}>
+      <KeyboardAvoidingView
+        style={styles.noteBackdrop}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
         <View style={styles.noteCard}>
           <Text style={styles.noteTitle}>Note · {label}</Text>
           <Text style={styles.noteHint}>What did you do this day? Anything worth remembering.</Text>
@@ -421,7 +424,7 @@ function NoteEditor({ date, initial, onClose }: { date: string; initial: string;
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

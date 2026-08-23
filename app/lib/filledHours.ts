@@ -76,6 +76,20 @@ function persist(): void {
   })();
 }
 
+/** Await a durable write of the current ledger. The background headless path needs
+ *  the file actually on disk before it asks the native scheduler to recompute the
+ *  notification (native reads quicklog-filled.json from a separate process), so it
+ *  can't rely on the fire-and-forget persist() above. */
+export async function flushFilled(): Promise<void> {
+  const snapshot = JSON.stringify(filled);
+  try {
+    const { File, Paths } = await fs();
+    const f = new File(Paths.document, FILLED_FILE);
+    if (!f.exists) f.create();
+    f.write(snapshot);
+  } catch { /* best-effort; reloaded from disk next foreground */ }
+}
+
 /** Load the ledger from disk into memory (idempotent). */
 export async function loadFilled(): Promise<void> {
   if (loaded) return;

@@ -2,7 +2,7 @@
 // loads, so the native HeadlessJsTaskService (started by the quick-log overlay or
 // the Wear OS listener) can invoke it to drain the plaintext answer queue into the
 // encrypted store even when the app UI is killed.
-import { AppRegistry, Platform } from "react-native";
+import { AppRegistry, NativeModules, Platform } from "react-native";
 
 if (Platform.OS === "android") {
   // Name must match the task the native MyHeadlessJsService returns from
@@ -15,6 +15,26 @@ if (Platform.OS === "android") {
       await drainQuickLogQueue();
     } catch {
       /* leave the queue for the next wake / background-fetch */
+    }
+    // Fill sleep from Health Connect in the background, so the hourly nudge (which
+    // the alarm kicks this task from) stops nagging for hours you were asleep - and
+    // then ask the native scheduler to drop those hours from the live notification.
+    // Guarded exactly like the foreground path: only after one successful manual
+    // sync (never auto-run the Health layer cold), and throttled hourly inside.
+    try {
+      const { ensureConfig, getConfig } = await import("./lib/config");
+      await ensureConfig();
+      const cfg = getConfig();
+      if (cfg?.healthSleepEnabled && cfg.lastHealthSyncAt > 0) {
+        const { syncHealthSleep } = await import("./lib/healthSync");
+        await syncHealthSleep(); // opts default -> no permission prompt (background)
+        const { flushFilled } = await import("./lib/filledHours");
+        await flushFilled(); // ledger on disk before native re-reads it
+      }
+      // Recompute/cancel the posted notification against the (now sleep-filled) ledger.
+      try { await NativeModules.QuickLog?.refreshNotification?.(); } catch { /* older native */ }
+    } catch {
+      /* health unavailable / locked: the notification just isn't refreshed this tick */
     }
   });
 }
