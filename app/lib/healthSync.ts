@@ -3,6 +3,7 @@
 // ones with the configured Sleep activity. Safe to call repeatedly (on toggle,
 // on "Sync now", and on app foreground); it's a no-op when disabled.
 import { ensureConfig, getConfig } from "./config";
+import { getDEK } from "./auth";
 import { isHealthAvailable, hasSleepPermission, requestSleepPermission, readSleepSessions } from "./health";
 import { sleepHours } from "./sleepFill";
 import { fillHealthSleep } from "./entries";
@@ -83,10 +84,16 @@ export async function syncHealthSleep(now = Date.now(), opts: SyncOptions = {}):
  * That's what guarantees a Health problem can't put the app in a launch crash
  * loop: the risky path only runs after the user has confirmed it works once.
  */
-export function maybeSyncHealthOnForeground(now = Date.now()): void {
-  const cfg = getConfig();
-  if (!cfg?.healthSleepEnabled) return;
+export async function maybeSyncHealthOnForeground(now = Date.now()): Promise<void> {
+  // Await the config load: getConfig() is undefined until AsyncStorage resolves, and
+  // reading it too early made the whole auto-sync silently no-op (the "sleep only
+  // fills on manual sync" regression).
+  const cfg = await ensureConfig();
+  if (!cfg.healthSleepEnabled) return;
   if (!(cfg.lastHealthSyncAt > 0)) return; // never auto-run before a successful manual sync
   if (now - cfg.lastHealthSyncAt < FOREGROUND_MIN_INTERVAL_MS) return;
-  void syncHealthSleep(now, { prompt: false });
+  // Locked (no key yet): fillHealthSleep would throw; skip now, a later foreground
+  // with the key will run it rather than burning the attempt on a guaranteed failure.
+  if (!getDEK()) return;
+  await syncHealthSleep(now, { prompt: false });
 }

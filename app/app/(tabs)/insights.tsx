@@ -134,6 +134,11 @@ export default function InsightsScreen() {
                         fill={c.chartFill}
                         grid={c.cardBorder}
                         axis={c.textFaint}
+                        granularity={stats.series.granularity}
+                        tooltipBg={c.card}
+                        tooltipColor={c.text}
+                        tooltipSub={c.textMuted}
+                        valueLabel={(v) => `mood ${v.toFixed(1)}`}
                       />
                     )}
                   </View>
@@ -299,8 +304,8 @@ function DayDetail({ hours }: { hours: (LocalEntry | undefined)[] }) {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   heading: { fontSize: 28, fontWeight: "800", color: c.text, paddingHorizontal: 16, paddingTop: 4 },
-  segmentWrap: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  completeToggle: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start" },
+  segmentWrap: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+  completeToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
   completeToggleText: { fontSize: 13, color: c.textMuted, fontWeight: "600" },
   segment: { flexDirection: "row", borderWidth: 1, borderColor: c.border, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" },
   segItem: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: c.card },
