@@ -16,6 +16,10 @@ jobs:
   build:
     runs-on: nas
     timeout-minutes: 90
+    # The secrets context is not available in an `if`, so presence has to be
+    # mapped through env here (env IS available in a step conditional).
+    env:
+      HAS_PLAY_KEY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,7 +68,7 @@ jobs:
       # itself (rather than failing) until PLAY_SERVICE_ACCOUNT_JSON is set, so the
       # box can be ticked before the key exists without breaking the build.
       - name: Upload AAB to the Play internal track
-        if: ${{ inputs.publish_to_play && secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+        if: ${{ inputs.publish_to_play && env.HAS_PLAY_KEY == 'true' }}
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: python3 ci/play-upload.py out/RightNow.aab internal
