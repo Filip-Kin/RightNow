@@ -181,3 +181,4 @@ server/dist/
 # server-embedded web build (produced in Docker)
 server/web/
 app/dist/
+__pycache__/
