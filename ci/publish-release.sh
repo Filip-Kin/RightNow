@@ -11,15 +11,23 @@ AUTH="Authorization: Bearer ${GITHUB_TOKEN}"
 JSON="Accept: application/vnd.github+json"
 
 # Drop any existing release + tag so the asset names stay clean across rebuilds
-# (GitHub refuses a second asset with the same name on one release).
-RID=$(curl -fsS -H "$AUTH" -H "$JSON" "$API/releases/tags/android-latest" 2>/dev/null | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+# (GitHub refuses a second asset with the same name on one release). The tr -d
+# compacts the response first: unlike Forgejo, GitHub pretty-prints its JSON, so
+# a bare grep for '"id":[0-9]*' never matches the space in '"id": 123'.
+RID=$(curl -fsS -H "$AUTH" -H "$JSON" "$API/releases/tags/android-latest" 2>/dev/null | tr -d " \n" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+# A run that died after the tag delete leaves a DRAFT, and a draft is invisible to
+# the by-tag lookup above while still holding the tag name. Fall back to the list.
+if [ -z "$RID" ]; then
+  RID=$(curl -fsS -H "$AUTH" -H "$JSON" "$API/releases?per_page=100" 2>/dev/null | tr -d " \n" \
+    | grep -o '"id":[0-9]*,[^{]*"tag_name":"android-latest"' | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+fi
 [ -n "$RID" ] && curl -fsS -X DELETE -H "$AUTH" -H "$JSON" "$API/releases/$RID" >/dev/null 2>&1
 curl -fsS -X DELETE -H "$AUTH" -H "$JSON" "$API/git/refs/tags/android-latest" >/dev/null 2>&1
 
 # Fresh release pointing at the built commit.
 RID=$(curl -fsS -X POST -H "$AUTH" -H "$JSON" -H "Content-Type: application/json" \
   -d "{\"tag_name\":\"android-latest\",\"target_commitish\":\"${GITHUB_SHA}\",\"name\":\"Android test build\",\"prerelease\":true,\"body\":\"Built from main on each android-apk run, release-signed with the EAS-managed upload key. RightNow.aab = Play upload (phone; currently arm64-v8a only). RightNow.apk = sideload (phone, arm64-v8a, Pixel 9 Pro). RightNow-wear.apk = Wear OS companion sideload (Pixel Watch 3).\"}" \
-  "$API/releases" 2>/dev/null | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
+  "$API/releases" 2>/dev/null | tr -d " \n" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
 if [ -z "$RID" ]; then echo "ERROR: could not create release"; exit 1; fi
 
 # name -> mime. The phone APK is required; the rest are uploaded when present.
