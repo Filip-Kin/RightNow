@@ -3,6 +3,11 @@ name: android-apk
 # it never slows the web deploy). Run from the Actions tab -> Run workflow.
 on:
   workflow_dispatch:
+    inputs:
+      publish_to_play:
+        description: "Also upload the phone AAB to the Play internal track"
+        type: boolean
+        default: false
 
 permissions:
   contents: write # publish-release.sh writes the moving android-latest release
@@ -53,3 +58,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: sh ci/publish-release.sh
+
+      # Opt-in per run: a normal build only refreshes the sideload release. Skips
+      # itself (rather than failing) until PLAY_SERVICE_ACCOUNT_JSON is set, so the
+      # box can be ticked before the key exists without breaking the build.
+      - name: Upload AAB to the Play internal track
+        if: ${{ inputs.publish_to_play && secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: python3 ci/play-upload.py out/RightNow.aab internal
