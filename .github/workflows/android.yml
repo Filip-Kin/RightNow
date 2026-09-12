@@ -1,0 +1,55 @@
+name: android-apk
+# Manual-only: build a sideloadable Android APK on demand (kept off the push path so
+# it never slows the web deploy). Run from the Actions tab -> Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # publish-release.sh writes the moving android-latest release
+
+jobs:
+  build:
+    runs-on: nas
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # versionCode must never go backwards or Play rejects the upload. The old
+      # Forgejo CI reached run 177 using its own run number, and GitHub's restarts
+      # at 1, so offset well clear of the forge's high-water mark.
+      - name: Compute versionCode
+        run: echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
+      - name: Build APK (release-signed, arm64-v8a)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          IMG="rightnow-android:${{ github.sha }}"
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.android -t "$IMG" \
+            --build-arg VERSION_CODE="$VERSION_CODE" \
+            --secret id=ks_b64,env=ANDROID_KEYSTORE_BASE64 \
+            --secret id=ks_pass,env=ANDROID_KEYSTORE_PASSWORD \
+            --secret id=key_alias,env=ANDROID_KEY_ALIAS \
+            --secret id=key_pass,env=ANDROID_KEY_PASSWORD \
+            .
+          mkdir -p out
+          cid=$(docker create "$IMG")
+          docker cp "$cid":/RightNow.apk out/RightNow.apk
+          docker cp "$cid":/RightNow.aab out/RightNow.aab
+          docker cp "$cid":/RightNow-wear.apk out/RightNow-wear.apk
+          docker cp "$cid":/RightNow-wear.aab out/RightNow-wear.aab
+          docker rm "$cid"
+          docker image rm "$IMG" || true
+          ls -la out
+
+      # A moving "android-latest" release keeps the phone's download URL stable.
+      # (upload-artifact would work here, but the URL would change every run.)
+      - name: Publish to the android-latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: sh ci/publish-release.sh
