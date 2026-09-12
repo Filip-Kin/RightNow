@@ -20,11 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # versionCode must never go backwards or Play rejects the upload. The old
-      # Forgejo CI reached run 177 using its own run number, and GitHub's restarts
-      # at 1, so offset well clear of the forge's high-water mark.
+      # versionCode must never go backwards or Play rejects the upload. Two schemes
+      # ran before this one: bare run numbers (latest 173, the Forgejo CI reached
+      # run 177) and an older 1000000+N (highest ever uploaded: 1000154). GitHub's
+      # run number restarts at 1, so base above BOTH high-water marks.
       - name: Compute versionCode
-        run: echo "VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+        run: echo "VERSION_CODE=$((1001000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
 
       - name: Build APK (release-signed, arm64-v8a)
         env:
