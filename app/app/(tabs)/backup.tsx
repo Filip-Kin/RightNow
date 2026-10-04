@@ -44,7 +44,7 @@ export default function BackupScreen() {
   const notes = useNotes();
   const activities = useActivities();
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ phase: "import" | "sync"; done: number; total: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,11 +80,13 @@ export default function BackupScreen() {
       }
       setBusy(true);
       if (parsed.activities.length) setActivities(parsed.activities);
-      const n = await importEntries(parsed.entries);
+      // Import in yielding batches (a 30k-entry backup used to freeze and then crash
+      // the app), keeping each entry's source, with one bar across both phases.
+      const n = await importEntries(parsed.entries, (done, total) => setProgress({ phase: "import", done, total }));
       const m = await importNotes(parsed.notes);
       // Push to the server now (in <=500 batches) with a progress bar, instead of
-      // leaving it to the silent background push.
-      await push((sent, total) => setProgress({ sent, total }));
+      // leaving it to the silent background push. Unchanged cells were skipped above.
+      await push((done, total) => setProgress({ phase: "sync", done, total }));
       setProgress(null);
       setMsg(`Restored and synced ${n} entr${n === 1 ? "y" : "ies"}, ${parsed.activities.length} activities${m ? `, ${m} note${m === 1 ? "" : "s"}` : ""}.`);
     } catch (e) {
@@ -132,9 +134,9 @@ export default function BackupScreen() {
 
           {progress && (
             <View style={styles.progressWrap}>
-              <Text style={styles.progressText}>Syncing to your account… {progress.sent}/{progress.total}</Text>
+              <Text style={styles.progressText}>{progress.phase === "import" ? "Importing" : "Syncing"} {progress.done}/{progress.total}</Text>
               <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${progress.total ? Math.round((progress.sent / progress.total) * 100) : 0}%` }]} />
+                <View style={[styles.progressFill, { width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }]} />
               </View>
             </View>
           )}
