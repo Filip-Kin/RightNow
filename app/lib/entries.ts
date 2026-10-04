@@ -19,7 +19,7 @@ import {
     subscribeTaxonomy, taxonomyDirty, taxonomySealedRecord,
 } from "./activities";
 import { dbLoadAll, dbFlush, dbClearAll, type DbEntry } from "./entryDb";
-import { markFilled, clearFilled, trimFilled } from "./filledHours";
+import { markFilled, markFilledMany, clearFilled, trimFilled } from "./filledHours";
 import { getConfig } from "./config";
 
 export interface LocalEntry {
@@ -404,33 +404,60 @@ export async function setTransitEntry(date: string, hour: number, activity: numb
     await fillTransit([{ date, hour, activity, feeling }]);
 }
 
+// Yield to the event loop every this many cells in a bulk import, so a restore of
+// tens of thousands of cells keeps the UI (and its progress bar) alive between
+// batches instead of blocking the JS thread for the whole HMAC loop.
+const IMPORT_YIELD = 500;
+
 /**
  * Bulk import (one metric per call). Merges with any existing cell so importing
  * activity then feeling for the same hour keeps both. `updatedAt` is the slot's
  * real time, so a genuine later manual edit always wins last-write-wins (import
- * never clobbers newer data, locally or on the server). Returns cells touched.
+ * never clobbers newer data, locally or on the server). A cell whose merged value
+ * and source already match the store is left alone: no disk write, no push, so
+ * restoring a backup over the same data uploads nothing. `source` defaults to
+ * "manual" (CSV import); a backup restore passes each entry's own source.
+ * `onProgress(done,total)` reports the loop for a progress bar. Returns items seen.
  */
 export async function importEntries(
-    items: { date: string; hour: number; activity?: number | null; feeling?: number | null }[],
+    items: { date: string; hour: number; activity?: number | null; feeling?: number | null; source?: LocalEntry["source"] }[],
+    onProgress?: (done: number, total: number) => void,
 ): Promise<number> {
     const dek = getDEK();
     if (!dek) throw new Error("Locked: no decryption key");
     await loadStore();
-    for (const it of items) {
+    const total = items.length;
+    const filledSlots: { date: string; hour: number }[] = [];
+    let changed = 0;
+    onProgress?.(0, total);
+    for (let i = 0; i < total; i++) {
+        if (i > 0 && i % IMPORT_YIELD === 0) {
+            onProgress?.(i, total);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        const it = items[i];
         const id = cellId(dek, it.date, it.hour);
         const prev = store[id];
         const activity = it.activity !== undefined ? it.activity : (prev?.activity ?? null);
         const feeling = it.feeling !== undefined ? it.feeling : (prev?.feeling ?? null);
+        const source = it.source ?? "manual";
+        if (activity !== null || feeling !== null) filledSlots.push({ date: it.date, hour: it.hour });
+        if (prev && !prev.deleted && prev.activity === activity && prev.feeling === feeling && prev.source === source) continue;
         const updatedAt = Math.max(slotMs(it.date, it.hour), prev?.updatedAt ?? 0);
-        store[id] = { date: it.date, hour: it.hour, activity, feeling, source: "manual", updatedAt, deleted: false };
+        store[id] = { date: it.date, hour: it.hour, activity, feeling, source, updatedAt, deleted: false };
         dirty.add(id);
         diskEntries.add(id);
-        if (activity !== null || feeling !== null) markFilled(it.date, it.hour);
+        changed++;
     }
-    emit();
-    await persist();
-    schedulePush();
-    return items.length;
+    onProgress?.(total, total);
+    // One ledger write for the whole batch (a markFilled per cell is O(n^2)).
+    markFilledMany(filledSlots);
+    if (changed) {
+        emit();
+        await persist();
+        schedulePush();
+    }
+    return total;
 }
 
 /** Bulk import day notes (used by CSV import). Day-real-time updatedAt so manual edits win. */
@@ -679,6 +706,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
         if (__DEV__) console.warn(`[sync] page since=${cursor}/${cursorId} -> records=${res.records.length} total=${res.total} hasMore=${res.hasMore}`);
         if (firstPage) { grandTotal = res.total; report(0, grandTotal, "pull"); firstPage = false; }
         let changed = false;
+        const pageFilled: { date: string; hour: number }[] = [];
         for (const r of res.records) {
             processed++;
             // Yield every so often so a big decrypt loop doesn't freeze the UI and the
@@ -708,7 +736,8 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
                 diskEntries.add(r.cellId);
                 // Reflect a hour logged on another device / the web into the shared
                 // ledger so the overlay + watch stop asking for it here.
-                if (!r.deleted && (p.activity !== null || p.feeling !== null)) markFilled(p.date, p.hour);
+                // Collected per page: a markFilled per record is O(n^2) on a big pull.
+                if (!r.deleted && (p.activity !== null || p.feeling !== null)) pageFilled.push({ date: p.date, hour: p.hour });
                 changed = true;
             } else {
                 const existing = notes[p.date];
@@ -719,6 +748,7 @@ async function runSync(onProgress?: (done: number, total: number, phase?: "push"
                 changed = true;
             }
         }
+        markFilledMany(pageFilled);
         cursor = res.cursor;
         cursorId = res.cursorId;
         diskCursor = true;

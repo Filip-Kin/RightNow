@@ -101,13 +101,30 @@ export function unwrapDEK(kek: Uint8Array, wrapped: Sealed): Uint8Array {
     return open(kek, wrapped);
 }
 
+// Memo of the derived sub-keys per DEK. Without it every cellId/seal/open ran two
+// HKDFs on top of its own HMAC/AEAD, which dominated a bulk restore (tens of
+// thousands of cells) on Hermes. Keyed by the DEK object, with a byte copy checked
+// on each hit so an in-place change to the DEK can never return stale sub-keys.
+const subkeyCache = new WeakMap<Uint8Array, { copy: Uint8Array; cellKey: Uint8Array; dataKey: Uint8Array }>();
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+}
+
 /** Sub-keys derived from the DEK: one for cell ids, one for entry payloads. */
 function dekSubkeys(dek: Uint8Array): { cellKey: Uint8Array; dataKey: Uint8Array } {
+    const hit = subkeyCache.get(dek);
+    if (hit && sameBytes(hit.copy, dek)) return hit;
     const empty = new Uint8Array(0);
-    return {
+    const keys = {
+        copy: dek.slice(),
         cellKey: hkdf(sha256, dek, empty, utf8ToBytes("rightnow/cell-id"), 32),
         dataKey: hkdf(sha256, dek, empty, utf8ToBytes("rightnow/cell-data"), 32),
     };
+    subkeyCache.set(dek, keys);
+    return keys;
 }
 
 /** Opaque, stable id for a (date, hour) cell. date is "YYYY-M-D". Leaks neither date nor hour. */

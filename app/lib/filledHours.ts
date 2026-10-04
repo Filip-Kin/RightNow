@@ -120,6 +120,34 @@ export function markFilled(date: string, hour: number): void {
   emit();
 }
 
+/**
+ * Mark many hours filled with ONE disk write. Bulk paths (backup restore, a full
+ * pull on a fresh device) must use this, not markFilled in a loop: every
+ * markFilled serialises the whole ledger and queues its own file write, so N calls
+ * cost O(N^2) time and hold N growing snapshots in memory at once. A 32k-entry
+ * restore needed gigabytes and crashed the app on Android.
+ *
+ * Slots older than the keep window are skipped: trimFilled would drop them anyway,
+ * and getToAsk never looks that far back. Returns how many were added.
+ */
+export function markFilledMany(slots: HourSlot[], now: number = Date.now()): number {
+  const cutoff = now - KEEP_MS;
+  let added = 0;
+  for (const { date, hour } of slots) {
+    const k = keyOf(date, hour);
+    if (filled[k]) continue;
+    const ms = slotMs(date, hour);
+    if (ms < cutoff) continue;
+    filled[k] = ms;
+    added++;
+  }
+  if (added) {
+    persist();
+    emit();
+  }
+  return added;
+}
+
 /** Un-mark an hour (only when it's been explicitly blanked to no activity/feeling). */
 export function clearFilled(date: string, hour: number): void {
   const k = keyOf(date, hour);
