@@ -154,6 +154,7 @@ export default function InsightsScreen() {
                         <View key={s.activity} style={styles.legendItem}>
                           <View style={[styles.swatch, { backgroundColor: activityColor(s.activity) }]} />
                           <Text style={styles.legendText} numberOfLines={1}>{activityName(s.activity)}</Text>
+                          <Text style={styles.legendHours}>{s.hours.toLocaleString()} h</Text>
                           <Text style={styles.legendPct}>{Math.round(s.fraction * 100)}%</Text>
                         </View>
                       ))}
@@ -332,7 +333,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 8 },
   swatch: { width: 12, height: 12, borderRadius: 3 },
   legendText: { flex: 1, fontSize: 13, color: c.textBody },
-  legendPct: { fontSize: 13, fontWeight: "600", color: c.textMuted },
+  legendHours: { fontSize: 13, color: c.textMuted, textAlign: "right", fontVariant: ["tabular-nums"] },
+  legendPct: { minWidth: 36, fontSize: 13, fontWeight: "600", color: c.textMuted, textAlign: "right", fontVariant: ["tabular-nums"] },
 
   barRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
   barLabel: { width: 90, fontSize: 13, color: c.textBody },
